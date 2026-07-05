@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>电商平台</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- 导航栏 -->
+    <nav class="navbar">
+        <div class="container">
+            <a href="#" class="logo" onclick="showPage('home')">电商平台</a>
+            <div class="nav-links">
+                <a href="#" onclick="showPage('products')">商品</a>
+                <a href="#" onclick="showPage('cart')" id="nav-cart">购物车 <span class="badge" id="cart-count">0</span></a>
+                <a href="#" onclick="showPage('orders')" id="nav-orders" style="display:none">我的订单</a>
+                <a href="#" onclick="showPage('admin')" id="nav-admin" style="display:none">后台管理</a>
+                <span id="nav-auth">
+                    <a href="#" onclick="showPage('login')">登录</a>
+                    <a href="#" onclick="showPage('register')">注册</a>
+                </span>
+                <span id="nav-user" style="display:none">
+                    <span id="username-display"></span>
+                    <a href="#" onclick="logout()">退出</a>
+                </span>
+            </div>
+        </div>
+    </nav>
+
+    <!-- 主内容区 -->
+    <main class="container">
+        <!-- 首页 -->
+        <div id="page-home" class="page active">
+            <div class="hero">
+                <h1>欢迎来到电商平台</h1>
+                <p>基于 FastAPI + SQLAlchemy + Redis + MySQL 构建的全栈电商系统</p>
+                <button class="btn btn-primary" onclick="showPage('products')">开始购物</button>
+            </div>
+            <div class="features">
+                <div class="feature-card">
+                    <h3>用户认证</h3>
+                    <p>JWT Token 认证，安全可靠</p>
+                </div>
+                <div class="feature-card">
+                    <h3>商品管理</h3>
+                    <p>完整的 CRUD，支持分页搜索</p>
+                </div>
+                <div class="feature-card">
+                    <h3>购物车</h3>
+                    <p>Redis Hash 存储，高性能</p>
+                </div>
+                <div class="feature-card">
+                    <h3>订单系统</h3>
+                    <p>状态机管理，防超卖设计</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 登录页 -->
+        <div id="page-login" class="page">
+            <div class="form-container">
+                <h2>用户登录</h2>
+                <form onsubmit="handleLogin(event)">
+                    <div class="form-group">
+                        <label>用户名</label>
+                        <input type="text" id="login-username" required>
+                    </div>
+                    <div class="form-group">
+                        <label>密码</label>
+                        <input type="password" id="login-password" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-block">登录</button>
+                </form>
+                <p class="text-center">没有账号？<a href="#" onclick="showPage('register')">立即注册</a></p>
+            </div>
+        </div>
+
+        <!-- 注册页 -->
+        <div id="page-register" class="page">
+            <div class="form-container">
+                <h2>用户注册</h2>
+                <form onsubmit="handleRegister(event)">
+                    <div class="form-group">
+                        <label>用户名</label>
+                        <input type="text" id="reg-username" required minlength="3">
+                    </div>
+                    <div class="form-group">
+                        <label>邮箱</label>
+                        <input type="email" id="reg-email" required>
+                    </div>
+                    <div class="form-group">
+                        <label>密码</label>
+                        <input type="password" id="reg-password" required minlength="6">
+                    </div>
+                    <div class="form-group">
+                        <label>手机号（可选）</label>
+                        <input type="tel" id="reg-phone">
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-block">注册</button>
+                </form>
+                <p class="text-center">已有账号？<a href="#" onclick="showPage('login')">立即登录</a></p>
+            </div>
+        </div>
+
+        <!-- 商品列表页 -->
+        <div id="page-products" class="page">
+            <div class="page-header">
+                <h2>商品列表</h2>
+                <div class="search-bar">
+                    <input type="text" id="search-keyword" placeholder="搜索商品..." onkeyup="searchProducts(event)">
+                    <button class="btn btn-primary" onclick="loadProducts()">搜索</button>
+                </div>
+            </div>
+            <div id="products-list" class="products-grid">
+                <!-- 商品卡片动态生成 -->
+            </div>
+            <div id="products-pagination" class="pagination"></div>
+        </div>
+
+        <!-- 商品详情页 -->
+        <div id="page-product-detail" class="page">
+            <div id="product-detail-content"></div>
+        </div>
+
+        <!-- 购物车页 -->
+        <div id="page-cart" class="page">
+            <h2>我的购物车</h2>
+            <div id="cart-content">
+                <p class="empty-msg">购物车为空</p>
+            </div>
+        </div>
+
+        <!-- 订单列表页 -->
+        <div id="page-orders" class="page">
+            <h2>我的订单</h2>
+            <div id="orders-list"></div>
+        </div>
+
+        <!-- 订单详情页 -->
+        <div id="page-order-detail" class="page">
+            <div id="order-detail-content"></div>
+        </div>
+
+        <!-- 后台管理页 -->
+        <div id="page-admin" class="page">
+            <h2>后台管理</h2>
+            <div class="admin-tabs">
+                <button class="tab-btn active" onclick="showAdminTab('stats')">数据统计</button>
+                <button class="tab-btn" onclick="showAdminTab('orders')">订单管理</button>
+                <button class="tab-btn" onclick="showAdminTab('users')">用户管理</button>
+            </div>
+            <div id="admin-stats" class="admin-content active">
+                <div id="stats-content">加载中...</div>
+            </div>
+            <div id="admin-orders" class="admin-content">
+                <div id="admin-orders-content">加载中...</div>
+            </div>
+            <div id="admin-users" class="admin-content">
+                <div id="admin-users-content">加载中...</div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Toast 提示 -->
+    <div id="toast" class="toast"></div>
+
+    <script src="app.js"></script>
+</body>
+</html>
