@@ -4,7 +4,7 @@
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, Column, DateTime, DECIMAL, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, Column, DateTime, DECIMAL, ForeignKey, Integer, JSON, String, Text
 from sqlalchemy.orm import relationship
 
 from database import Base
@@ -34,6 +34,8 @@ class Product(Base):
     stock = Column(Integer, nullable=False, default=0)
     category_id = Column(Integer, ForeignKey("categories.id"))
     image_url = Column(String(500))
+    brand = Column(String(100), nullable=True, index=True)
+    specs = Column(JSON, nullable=True)
     is_on_sale = Column(Boolean, default=True)
     sales_count = Column(Integer, default=0)
     created_at = Column(DateTime, default=datetime.now)

@@ -1,97 +1,136 @@
-# 🛒 E-Commerce API
+# 🛒 E-Commerce API — AI 智能导购电商平台
 
-基于 **FastAPI + SQLAlchemy 2.0 + Redis + AI** 构建的全功能电商后端 API。
+基于 **FastAPI + LangGraph + RAG + Redis + MySQL** 构建的全功能电商后端 API，集成 AI 智能导购 Agent、三级混合检索、语义缓存、全链路监控。
 
 ## ✨ 项目亮点
 
 | 特性 | 说明 |
 |------|------|
-| **JWT 认证** | 用户注册/登录，基于角色的权限控制（普通用户/管理员） |
-| **Redis 购物车** | 使用 Redis Hash 存储购物车，支持高并发读写 |
-| **订单状态机** | 状态转移表集中管理，防止非法状态变更 |
-| **防超卖设计** | WHERE 条件扣减库存，避免并发超卖 |
-| **数据快照** | 订单项存储商品快照，历史数据不受商品修改影响 |
-| **AI 智能客服** | RAG 检索增强生成，语义搜索，商品推荐 |
-| **降级策略** | AI 不可用时自动回退到关键词搜索 |
+| **AI 智能导购** | LangGraph ReAct Agent，自动搜索、比价、库存校验、加购，支持多轮对话 |
+| **三级混合检索** | BM25 关键词 + FAISS 向量 + Cross-Encoder Reranker，精准匹配商品 |
+| **语义缓存** | Redis 存储 query embedding → 答案，相似度 ≥ 0.9 直接返回，延迟 <10ms |
+| **全链路监控** | AI 调用日志（token/耗时/模型）、Agent 决策追踪、Redis 统计指标 |
+| **限流熔断** | 滑动窗口限流（30次/分钟/用户）、三状态熔断器自动降级 |
+| **记忆系统** | 短期滑动窗口（当前对话）+ 长期用户偏好（品类/品牌/价格区间） |
+| **安全控制** | 工具权限分级、Prompt 注入检测、敏感操作确认、参数校验 |
+| **防超卖设计** | WHERE 条件扣减库存，数据快照保护历史订单 |
+| **深色模式** | 前端支持一键切换深色/浅色主题 |
 
 ## 🏗️ 技术架构
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                      Frontend                           │
-│                   (HTML/CSS/JS)                         │
-└─────────────────────────┬───────────────────────────────┘
-                          │ HTTP
-┌─────────────────────────▼───────────────────────────────┐
-│                    FastAPI                               │
-│  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐      │
-│  │  Auth   │ │Products │ │  Cart   │ │ Orders  │      │
-│  │ Router  │ │ Router  │ │ Router  │ │ Router  │      │
-│  └────┬────┘ └────┬────┘ └────┬────┘ └────┬────┘      │
-│       │           │           │           │            │
-│  ┌────▼───────────▼───────────▼───────────▼────┐      │
-│  │              Service Layer                   │      │
-│  └────┬───────────┬───────────┬───────────┬────┘      │
-└───────┼───────────┼───────────┼───────────┼────────────┘
-        │           │           │           │
-   ┌────▼────┐ ┌────▼────┐ ┌────▼────┐ ┌────▼────┐
-   │  MySQL  │ │  Redis  │ │ OpenAI  │ │  JWT    │
-   │         │ │         │ │   API   │ │         │
-   └─────────┘ └─────────┘ └─────────┘ └─────────┘
+┌─────────────────────────────────────────────────────────────┐
+│                    Frontend (Vanilla JS)                      │
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌────────────────┐ │
+│  │ 商品浏览  │ │ 购物车   │ │ 订单管理  │ │ AI 聊天悬浮窗  │ │
+│  └──────────┘ └──────────┘ └──────────┘ └────────────────┘ │
+└──────────────────────────┬──────────────────────────────────┘
+                           │ HTTP
+┌──────────────────────────▼──────────────────────────────────┐
+│                      FastAPI                                 │
+│  ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐ ┌──────────┐ │
+│  │  Auth  │ │Products│ │  Cart  │ │ Orders │ │  Agent   │ │
+│  └───┬────┘ └───┬────┘ └───┬────┘ └───┬────┘ └────┬─────┘ │
+│      │          │          │          │            │        │
+│  ┌───▼──────────▼──────────▼──────────▼────────────▼─────┐ │
+│  │                   Service Layer                        │ │
+│  │  ┌─────────┐ ┌──────────┐ ┌──────────┐ ┌───────────┐ │ │
+│  │  │ Agent   │ │   RAG    │ │ Monitor  │ │   Cache   │ │ │
+│  │  │ (React) │ │ (Hybrid) │ │ (Logger) │ │ (Semantic)│ │ │
+│  │  └─────────┘ └──────────┘ └──────────┘ └───────────┘ │ │
+│  └───────────────────────────────────────────────────────┘ │
+└───────┬──────────┬──────────┬──────────┬────────────────────┘
+        │          │          │          │
+   ┌────▼────┐ ┌───▼────┐ ┌──▼───┐ ┌───▼─────┐
+   │  MySQL  │ │ Redis  │ │OpenAI│ │   FAISS │
+   │         │ │(cache/ │ │ API  │ │(vectors)│
+   │         │ │ratelmt)│ │      │ │         │
+   └─────────┘ └────────┘ └──────┘ └─────────┘
 ```
 
 ## 🛠️ 技术栈
 
 | 技术 | 用途 |
 |------|------|
-| FastAPI | Web 框架，自动生成 OpenAPI 文档 |
-| SQLAlchemy 2.0 | ORM，异步支持 |
-| MySQL | 主数据库 |
-| Redis | 购物车存储、缓存 |
-| python-jose | JWT 令牌生成与验证 |
-| passlib + bcrypt | 密码加密 |
-| OpenAI API | AI 智能客服（RAG） |
+| **FastAPI** | Web 框架，自动生成 OpenAPI 文档 |
+| **SQLAlchemy 2.0** | ORM，MySQL 连接池 |
+| **MySQL** | 主数据库（商品/用户/订单） |
+| **Redis** | 购物车、语义缓存、限流、熔断器、统计指标 |
+| **LangGraph** | Agent 编排框架（ReAct 循环 + human-in-the-loop） |
+| **LangChain OpenAI** | LLM 调用 + Embedding 生成 |
+| **FAISS** | 向量检索（IndexFlatIP，余弦相似度） |
+| **sentence-transformers** | Cross-Encoder Reranker（ms-marco-MiniLM-L6-v2） |
+| **jieba** | 中文分词 + 同义词扩展 |
+| **python-jose + bcrypt** | JWT 认证 + 密码加密 |
 
 ## 📦 功能模块
 
 ### 用户认证
-- 用户注册、登录
-- JWT 令牌认证
-- 角色权限控制（用户/管理员）
+- 用户注册、登录，JWT 令牌认证
+- 角色权限控制（普通用户/管理员）
 
 ### 商品管理
-- 商品 CRUD（创建、读取、更新、删除）
-- 分页查询、关键词搜索
-- 软删除（标记删除而非物理删除）
+- 商品 CRUD，分页查询，关键词搜索
+- 支持品牌、规格参数（JSON 字段）
+- 软删除（下架而非物理删除）
 
 ### 购物车
-- 添加、修改、删除商品
 - Redis Hash 存储，高性能读写
-- 清空购物车
+- 添加、修改、删除、清空
 
 ### 订单系统
-- 创建订单（库存扣减）
-- 订单状态机（待支付→已支付→已发货→已完成/已取消）
-- 数据快照（历史订单不受商品修改影响）
+- 创建订单自动扣减库存（WHERE 条件防超卖）
+- 状态机：待支付 → 已支付 → 已发货 → 已完成/已取消
+- 数据快照保护历史订单
 
 ### 后台管理
 - 用户管理（启用/禁用）
 - 订单管理（发货/退款）
 - 销售数据统计
 
-### AI 智能客服
-- RAG 问答（基于商品数据的检索增强生成）
-- 语义搜索（理解用户意图）
-- 商品推荐（基于相似度）
-- 降级策略（AI 不可用时回退到关键词搜索）
+### AI 智能导购 Agent
+- **ReAct 推理**：思考 → 行动 → 观察 → 再思考循环
+- **6 个业务工具**：搜索商品、查看详情、校验库存、计算价格、加购、获取偏好
+- **Human-in-the-loop**：敏感操作（加购）通过 interrupt 机制暂停等待确认
+- **记忆系统**：Redis 短期滑动窗口 + 长期用户偏好提取
+- **安全控制**：工具权限分级、Prompt 注入检测、参数校验
+
+### RAG 三级混合检索
+- **第一层 BM25**：jieba 中文分词 + 倒排索引 + 同义词扩展
+- **第二层向量**：FAISS IndexFlatIP + OpenAI/Sentence-Transformers 嵌入
+- **第三层 Reranker**：Cross-Encoder ms-marco-MiniLM-L6-v2 重排序
+- **融合策略**：min-max 归一化 + 加权融合（α=0.3, β=0.3, γ=0.4）
+- **降级链**：全量 → BM25+Vector → BM25 only → MySQL LIKE
+
+### 语义缓存
+- Redis 存储 query embedding → 缓存答案
+- 余弦相似度 ≥ 0.9 直接返回（延迟 <10ms）
+- 商品更新自动清除相关缓存
+- 命中率统计
+
+### 全链路监控
+- AI 调用日志：模型、token 数、耗时、成功/失败
+- Agent 决策追踪：每步思考、工具调用、结果
+- Redis 统计计数器：总调用、成功率、平均延迟、token 消耗
+
+### 限流与熔断
+- 滑动窗口限流：Redis ZSET，每用户每分钟 30 次
+- 三状态熔断器：CLOSED → OPEN（连续 5 次失败）→ HALF_OPEN（60s 后试探）→ CLOSED
+- 降级回退：熔断时自动降级到关键词搜索
+
+### 前端 UI
+- 深色模式一键切换
+- AI 智能导购悬浮聊天窗（浮动气泡 + 对话窗口）
+- 商品卡片（品牌标签、销量徽章、悬停动画）
+- 响应式设计（768px / 480px 断点）
 
 ## 🚀 快速开始
 
 ### 环境要求
 
-- Python 3.9+
+- Python 3.10+
 - MySQL 5.7+
-- Redis（可选，购物车功能需要）
+- Redis 6.0+
 
 ### 1. 克隆项目
 
@@ -118,23 +157,25 @@ pip install -r requirements.txt
 
 ### 4. 配置数据库
 
-创建 MySQL 数据库：
-
 ```sql
 CREATE DATABASE ecommerce CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 ```
 
-编辑 `config.py`，修改数据库连接信息：
+通过环境变量配置（或直接编辑 `config.py`）：
 
-```python
-MYSQL_USER = "root"
-MYSQL_PASSWORD = "你的密码"
-MYSQL_HOST = "localhost"
-MYSQL_PORT = 3306
-MYSQL_DATABASE = "ecommerce"
+```bash
+# Windows
+set MYSQL_PASSWORD=你的密码
+set SECRET_KEY=你的密钥
+set OPENAI_API_KEY=sk-xxx
+
+# Linux/Mac
+export MYSQL_PASSWORD=你的密码
+export SECRET_KEY=你的密钥
+export OPENAI_API_KEY=sk-xxx
 ```
 
-### 5. 启动 Redis（可选）
+### 5. 启动 Redis
 
 ```bash
 redis-server
@@ -146,9 +187,10 @@ redis-server
 python -m uvicorn main:app --reload
 ```
 
-### 7. 访问 API 文档
+### 7. 访问
 
-打开浏览器访问：http://localhost:8000/docs
+- 前端页面：http://localhost:8000
+- API 文档：http://localhost:8000/docs
 
 ## 📚 API 接口
 
@@ -162,7 +204,7 @@ python -m uvicorn main:app --reload
 ### 商品
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| GET | `/api/products` | 商品列表（分页、搜索） |
+| GET | `/api/products` | 商品列表（分页、搜索、排序） |
 | GET | `/api/products/{id}` | 商品详情 |
 | POST | `/api/products` | 创建商品 |
 | PUT | `/api/products/{id}` | 更新商品 |
@@ -175,80 +217,124 @@ python -m uvicorn main:app --reload
 | POST | `/api/cart` | 添加到购物车 |
 | PUT | `/api/cart/{product_id}` | 更新数量 |
 | DELETE | `/api/cart/{product_id}` | 删除商品 |
-| DELETE | `/api/cart` | 清空购物车 |
 
 ### 订单
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | POST | `/api/orders` | 创建订单 |
 | GET | `/api/orders` | 我的订单列表 |
-| GET | `/api/orders/{id}` | 订单详情 |
+| PUT | `/api/orders/{id}/pay` | 支付订单 |
 | PUT | `/api/orders/{id}/cancel` | 取消订单 |
-| PUT | `/api/orders/{id}/pay` | 支付订单（模拟） |
 | PUT | `/api/orders/{id}/confirm` | 确认收货 |
 
 ### 后台管理（需要管理员权限）
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | GET | `/api/admin/users` | 用户列表 |
-| PUT | `/api/admin/users/{id}/status` | 禁用/启用用户 |
 | GET | `/api/admin/orders` | 所有订单 |
 | PUT | `/api/admin/orders/{id}/ship` | 发货 |
 | PUT | `/api/admin/orders/{id}/refund` | 退款 |
 | GET | `/api/admin/stats/sales` | 销售统计 |
-| GET | `/api/admin/stats/users` | 用户统计 |
 
-### AI 智能客服（需要 OPENAI_API_KEY）
+### AI 智能客服
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| POST | `/api/ai/chat` | 智能客服问答（RAG） |
+| POST | `/api/ai/chat` | RAG 问答（三级检索 + 语义缓存） |
 | POST | `/api/ai/search` | 语义搜索 |
-| GET | `/api/ai/recommend/{product_id}` | 商品推荐 |
-| GET | `/api/ai/status` | AI 服务状态 |
+| GET | `/api/ai/recommend/{id}` | 商品推荐 |
+| GET | `/api/ai/status` | 服务状态（RAG/缓存/熔断器） |
+| GET | `/api/ai/stats` | AI 调用统计指标 |
+
+### AI 智能导购 Agent
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| POST | `/api/agent/chat` | Agent 对话（ReAct 模式，自动调用工具） |
+| POST | `/api/agent/confirm` | 确认敏感操作（加购等） |
+| GET | `/api/agent/history/{session_id}` | 对话历史 |
+| DELETE | `/api/agent/history/{session_id}` | 清除对话历史 |
+| GET | `/api/agent/preferences` | 用户偏好 |
+| GET | `/api/agent/stats` | Agent 统计（含缓存/熔断器） |
 
 ## 📁 项目结构
 
 ```
 ecommerce-api/
-├── main.py                 # FastAPI 应用入口
-├── config.py               # 配置文件
-├── database.py             # 数据库连接
-├── dependencies.py         # 依赖注入
-├── models/                 # SQLAlchemy 数据模型
-│   ├── user.py             # 用户模型
-│   ├── product.py          # 商品模型
-│   ├── order.py            # 订单模型
-│   └── cart.py             # 购物车模型
-├── schemas/                # Pydantic 数据验证
-│   ├── user.py             # 用户 Schema
-│   ├── product.py          # 商品 Schema
-│   ├── order.py            # 订单 Schema
-│   └── cart.py             # 购物车 Schema
-├── routers/                # API 路由
-│   ├── auth.py             # 认证路由
-│   ├── products.py         # 商品路由
-│   ├── cart.py             # 购物车路由
-│   ├── orders.py           # 订单路由
-│   ├── admin.py            # 后台管理路由
-│   └── ai.py               # AI 智能客服路由
-└── services/               # 业务逻辑层
-    ├── auth_service.py     # 认证服务
-    ├── product_service.py  # 商品服务
-    ├── cart_service.py     # 购物车服务
-    ├── order_service.py    # 订单服务
-    └── ai_service.py       # AI 服务（RAG、语义搜索、推荐）
+├── main.py                     # FastAPI 入口 + RAG 索引构建 + 请求日志中间件
+├── config.py                   # 配置（环境变量读取）
+├── database.py                 # MySQL 连接池
+├── dependencies.py             # JWT 认证依赖注入
+│
+├── agent/                      # AI 智能导购 Agent（7 文件，1578 行）
+│   ├── state.py                #   Agent 状态定义
+│   ├── tools.py                #   6 个业务工具（上下文变量传递 DB）
+│   ├── graph.py                #   LangGraph ReAct 图（并行工具执行）
+│   ├── memory.py               #   记忆系统（短期/长期）
+│   ├── security.py             #   安全控制（权限/注入/校验）
+│   └── async_tools.py          #   异步工具执行器
+│
+├── rag/                        # RAG 三级混合检索（9 文件，1785 行）
+│   ├── tokenizer.py            #   jieba 分词 + 同义词扩展
+│   ├── bm25.py                 #   第一层：BM25 倒排索引
+│   ├── vector_store.py         #   第二层：FAISS 向量检索
+│   ├── reranker.py             #   第三层：Cross-Encoder 重排序
+│   ├── retriever.py            #   三级融合检索器
+│   ├── chunker.py              #   结构化商品分块
+│   ├── evaluation.py           #   评估框架（Recall/NDCG/Precision）
+│   └── exceptions.py           #   自定义异常
+│
+├── monitoring/                 # 监控模块（4 文件，667 行）
+│   ├── logger.py               #   AI 调用日志 + Agent 追踪 + 统计
+│   ├── rate_limiter.py         #   滑动窗口限流（Redis ZSET）
+│   └── circuit_breaker.py      #   三状态熔断器
+│
+├── cache/                      # 缓存模块（2 文件，343 行）
+│   └── semantic_cache.py       #   语义缓存（embedding 相似度）
+│
+├── frontend/                   # 前端（3 文件，2046 行）
+│   ├── index.html              #   单页应用 + AI 聊天悬浮窗
+│   ├── style.css               #   深色模式 + 响应式 + 聊天窗样式
+│   └── app.js                  #   API 调用 + AI 聊天 + 主题切换
+│
+├── models/                     # SQLAlchemy 数据模型
+├── schemas/                    # Pydantic 数据验证
+├── routers/                    # API 路由
+├── services/                   # 业务逻辑层
+├── data/                       # 测试集 + 索引文件
+│   └── test_set.json           #   50 条评估问答对
+└── scripts/
+    └── run_evaluation.py       # RAG 评估脚本
 ```
 
 ## 🔧 设计决策
 
-1. **数据快照**：订单项存储商品快照，历史订单不受商品修改影响
-2. **状态机**：订单状态用转移表集中管理，防止非法状态变更
-3. **防超卖**：WHERE 条件扣减库存，避免并发超卖
-4. **签名验证**：支付回调验签防止伪造
-5. **幂等性**：重复回调只处理一次
-6. **RAG 智能客服**：基于商品数据的检索增强生成，减少幻觉
-7. **语义搜索**：理解用户意图，不只是关键词匹配
-8. **降级策略**：AI 不可用时自动回退到关键词搜索
+| # | 决策 | 说明 |
+|---|------|------|
+| 1 | **数据快照** | 订单项存储商品快照，历史订单不受商品修改影响 |
+| 2 | **状态机** | 订单状态用转移表集中管理，防止非法状态变更 |
+| 3 | **防超卖** | WHERE 条件扣减库存，避免并发超卖 |
+| 4 | **ReAct Agent** | LangGraph 实现思考→行动→观察循环，支持多工具编排 |
+| 5 | **Human-in-the-loop** | 敏感操作（加购）通过 interrupt 暂停，等待用户确认 |
+| 6 | **三级检索融合** | BM25(0.3) + Vector(0.3) + Reranker(0.4) 加权融合 |
+| 7 | **同义词扩展** | 电商同义词表（手机=智能手机=移动电话），提升召回率 |
+| 8 | **语义缓存** | embedding 余弦相似度 ≥ 0.9 返回缓存，商品更新自动失效 |
+| 9 | **熔断器** | 连续 5 次失败 → OPEN，60s 后 HALF_OPEN 试探，成功 → CLOSED |
+| 10 | **并行工具执行** | ThreadPoolExecutor + contextvars.copy_context() 并行调用多个工具 |
+| 11 | **降级链** | 全量混合检索 → BM25+Vector → BM25 only → MySQL LIKE |
+
+## 📊 代码统计
+
+| 模块 | 文件数 | 行数 |
+|------|--------|------|
+| rag/ | 9 | 1785 |
+| agent/ | 7 | 1578 |
+| frontend/ | 3 | 2046 |
+| routers/ | 8 | 1178 |
+| services/ | 6 | 818 |
+| monitoring/ | 4 | 667 |
+| cache/ | 2 | 343 |
+| models/ + schemas/ | 10 | 379 |
+| 其他 | 4 | 440 |
+| **合计** | **53** | **~9200** |
 
 ## 📄 License
 

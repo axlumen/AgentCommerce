@@ -9,3 +9,9 @@ redis==5.1.1
 python-multipart==0.0.12
 pymysql==1.1.1
 cryptography==43.0.1
+langgraph>=0.4
+langchain-openai>=0.3
+langchain-core>=0.3
+jieba>=0.42
+faiss-cpu>=1.7
+sentence-transformers>=2.2

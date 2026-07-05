@@ -35,6 +35,8 @@ class ProductCreate(BaseModel):
     stock: int = Field(..., ge=0, description="库存")
     category_id: int | None = Field(None, description="分类 ID")
     image_url: str | None = Field(None, description="商品图片")
+    brand: str | None = Field(None, max_length=100, description="品牌")
+    specs: dict | None = Field(None, description="规格参数")
 
 
 class ProductUpdate(BaseModel):
@@ -46,6 +48,8 @@ class ProductUpdate(BaseModel):
     stock: int | None = Field(None, ge=0, description="库存")
     category_id: int | None = Field(None, description="分类 ID")
     image_url: str | None = Field(None, description="商品图片")
+    brand: str | None = Field(None, max_length=100, description="品牌")
+    specs: dict | None = Field(None, description="规格参数")
     is_on_sale: bool | None = Field(None, description="是否上架")
 
 
@@ -59,6 +63,8 @@ class ProductResponse(BaseModel):
     stock: int
     category_id: int | None
     image_url: str | None
+    brand: str | None
+    specs: dict | None
     is_on_sale: bool
     sales_count: int
     created_at: datetime
