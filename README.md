@@ -146,6 +146,12 @@ docker-compose down -v        # 停止并删除数据卷（MySQL 数据会丢失
 
 > 包含三个服务：App（FastAPI）+ MySQL 8.0 + Redis 7，数据库自动初始化。
 
+导入种子数据（可选，35 个演示商品）：
+
+```bash
+docker-compose exec app python -m scripts.seed_data
+```
+
 ---
 
 ### 手动部署
@@ -204,6 +210,14 @@ export OPENAI_API_KEY=sk-xxx
 ```bash
 redis-server
 ```
+
+#### 6. 初始化种子数据（可选）
+
+```bash
+python -m scripts.seed_data
+```
+
+> 包含 35 个热销商品（手机、耳机、笔记本、手表、家电），用于演示和测试。
 
 #### 6. 启动应用
 
@@ -329,7 +343,8 @@ AgentCommerce/
 ├── data/                       # 测试集 + 索引文件
 │   └── test_set.json           #   50 条评估问答对
 └── scripts/
-    └── run_evaluation.py       # RAG 评估脚本
+    ├── seed_data.py            #   商品种子数据（35 个热销商品）
+    └── run_evaluation.py       #   RAG 评估脚本
 ```
 
 ## 🔧 设计决策
