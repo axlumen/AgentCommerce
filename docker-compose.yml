@@ -3,14 +3,18 @@ services:
     build: .
     ports:
       - "8000:8000"
+    env_file:
+      - .env
     environment:
       - MYSQL_HOST=mysql
       - MYSQL_PORT=3306
       - MYSQL_USER=root
-      - MYSQL_PASSWORD=123456
-      - MYSQL_DATABASE=agentcommerce
+      - MYSQL_DATABASE=${MYSQL_DATABASE:-agentcommerce}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD:-changeme}
       - REDIS_HOST=redis
       - REDIS_PORT=6379
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_BASE_URL=${OPENAI_BASE_URL}
     depends_on:
       mysql:
         condition: service_healthy
@@ -21,10 +25,10 @@ services:
   mysql:
     image: mysql:8.0
     ports:
-      - "3306:3306"
+      - "3307:3306"
     environment:
-      - MYSQL_ROOT_PASSWORD=123456
-      - MYSQL_DATABASE=agentcommerce
+      - MYSQL_ROOT_PASSWORD=${MYSQL_PASSWORD:-changeme}
+      - MYSQL_DATABASE=${MYSQL_DATABASE:-agentcommerce}
     volumes:
       - mysql_data:/var/lib/mysql
     healthcheck:
