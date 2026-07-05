@@ -126,20 +126,44 @@
 
 ## 🚀 快速开始
 
-### 环境要求
+### Docker 一键部署（推荐）
+
+```bash
+git clone https://github.com/axlumen/AgentCommerce.git
+cd AgentCommerce
+docker-compose up -d --build
+```
+
+启动后访问：
+- 前端页面：http://localhost:8000
+- API 文档：http://localhost:8000/docs
+
+```bash
+docker-compose logs -f app   # 查看应用日志
+docker-compose down           # 停止服务
+docker-compose down -v        # 停止并删除数据卷（MySQL 数据会丢失）
+```
+
+> 包含三个服务：App（FastAPI）+ MySQL 8.0 + Redis 7，数据库自动初始化。
+
+---
+
+### 手动部署
+
+#### 环境要求
 
 - Python 3.10+
 - MySQL 5.7+
 - Redis 6.0+
 
-### 1. 克隆项目
+#### 1. 克隆项目
 
 ```bash
 git clone https://github.com/axlumen/AgentCommerce.git
 cd AgentCommerce
 ```
 
-### 2. 创建虚拟环境
+#### 2. 创建虚拟环境
 
 ```bash
 python -m venv venv
@@ -149,13 +173,13 @@ venv\Scripts\activate
 source venv/bin/activate
 ```
 
-### 3. 安装依赖
+#### 3. 安装依赖
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 4. 配置数据库
+#### 4. 配置数据库
 
 ```sql
 CREATE DATABASE agentcommerce CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
@@ -175,19 +199,19 @@ export SECRET_KEY=你的密钥
 export OPENAI_API_KEY=sk-xxx
 ```
 
-### 5. 启动 Redis
+#### 5. 启动 Redis
 
 ```bash
 redis-server
 ```
 
-### 6. 启动应用
+#### 6. 启动应用
 
 ```bash
 python -m uvicorn main:app --reload
 ```
 
-### 7. 访问
+#### 7. 访问
 
 - 前端页面：http://localhost:8000
 - API 文档：http://localhost:8000/docs
@@ -263,6 +287,9 @@ AgentCommerce/
 ├── config.py                   # 配置（环境变量读取）
 ├── database.py                 # MySQL 连接池
 ├── dependencies.py             # JWT 认证依赖注入
+├── Dockerfile                  # Docker 镜像构建
+├── docker-compose.yml          # 一键部署（App + MySQL + Redis）
+├── .dockerignore               # Docker 构建排除规则
 │
 ├── agent/                      # AI 智能导购 Agent（7 文件，1578 行）
 │   ├── state.py                #   Agent 状态定义
