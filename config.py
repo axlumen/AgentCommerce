@@ -12,7 +12,7 @@ MYSQL_USER = os.getenv("MYSQL_USER", "root")
 MYSQL_PASSWORD = os.getenv("MYSQL_PASSWORD", "123456")
 MYSQL_HOST = os.getenv("MYSQL_HOST", "localhost")
 MYSQL_PORT = int(os.getenv("MYSQL_PORT", "3306"))
-MYSQL_DATABASE = os.getenv("MYSQL_DATABASE", "ecommerce")
+MYSQL_DATABASE = os.getenv("MYSQL_DATABASE", "agentcommerce")
 
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
@@ -38,7 +38,7 @@ CART_EXPIRE_DAYS = 7  # 购物车 7 天过期
 ORDER_TIMEOUT_MINUTES = 30  # 订单 30 分钟未支付自动取消
 
 # Agent 配置
-AGENT_MODEL = os.getenv("AGENT_MODEL", "gpt-4o")
+AGENT_MODEL = os.getenv("AGENT_MODEL", "mimo-2.5-pro")
 AGENT_MAX_ITERATIONS = 10
 AGENT_TOOL_TIMEOUT = 30
 AGENT_CONTEXT_WINDOW = 20

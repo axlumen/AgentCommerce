@@ -1,4 +1,4 @@
-# 🛒 E-Commerce API — AI 智能导购电商平台
+# 🛒 AgentCommerce — AI 智能导购电商平台
 
 基于 **FastAPI + LangGraph + RAG + Redis + MySQL** 构建的全功能电商后端 API，集成 AI 智能导购 Agent、三级混合检索、语义缓存、全链路监控。
 
@@ -135,8 +135,8 @@
 ### 1. 克隆项目
 
 ```bash
-git clone https://github.com/axlumen/ecommerce-api.git
-cd ecommerce-api
+git clone https://github.com/axlumen/AgentCommerce.git
+cd AgentCommerce
 ```
 
 ### 2. 创建虚拟环境
@@ -158,7 +158,7 @@ pip install -r requirements.txt
 ### 4. 配置数据库
 
 ```sql
-CREATE DATABASE ecommerce CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE DATABASE agentcommerce CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 ```
 
 通过环境变量配置（或直接编辑 `config.py`）：
@@ -258,7 +258,7 @@ python -m uvicorn main:app --reload
 ## 📁 项目结构
 
 ```
-ecommerce-api/
+AgentCommerce/
 ├── main.py                     # FastAPI 入口 + RAG 索引构建 + 请求日志中间件
 ├── config.py                   # 配置（环境变量读取）
 ├── database.py                 # MySQL 连接池
