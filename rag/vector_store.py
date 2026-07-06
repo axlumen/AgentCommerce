@@ -183,9 +183,15 @@ class VectorStore:
             logger.warning("No documents to index")
             return
 
-        # 批量生成嵌入
+        # 分批生成嵌入（DashScope 等 API 有 batch size 限制）
         try:
-            embeddings = embed_fn(texts)
+            batch_size = int(os.getenv("RAG_EMBEDDING_BATCH_SIZE", "10"))
+            all_embeddings = []
+            for i in range(0, len(texts), batch_size):
+                batch = texts[i : i + batch_size]
+                all_embeddings.append(embed_fn(batch))
+                logger.debug(f"Embedded batch {i // batch_size + 1}: {len(batch)} texts")
+            embeddings = np.concatenate(all_embeddings, axis=0)
         except Exception as e:
             raise EmbeddingError(f"Failed to generate embeddings: {e}")
 

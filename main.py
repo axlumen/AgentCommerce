@@ -102,8 +102,6 @@ frontend_dir = Path(__file__).parent / "frontend"
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
     """记录请求耗时和状态码"""
-    # DEBUG: log all incoming requests
-    print(f"DEBUG-MW: {request.method} {request.url.path}")
     start = time.time()
     response = await call_next(request)
     elapsed_ms = (time.time() - start) * 1000
@@ -157,25 +155,6 @@ async def js():
     return FileResponse(frontend_dir / "app.js", media_type="application/javascript")
 
 
-# 通配路由：服务 frontend/core/, components/, pages/ 下的 JS/CSS 等静态文件
-@app.get("/{full_path:path}")
-async def serve_frontend(full_path: str):
-    """Catch-all 用于前端子模块（core/、components/、pages/）"""
-    # 跳过已有明确路由
-    reserved = {"/", "/style.css", "/app.js", "/health", "/api-info",
-                "/docs", "/redoc", "/openapi.json", "/docs/oauth2-redirect"}
-    if full_path in reserved or full_path.startswith("/api"):
-        return Response(status_code=404)
-
-    # 去掉前导 /，Path 拼接需要相对路径
-    clean_path = full_path.lstrip("/")
-    file_path = frontend_dir / clean_path
-    if file_path.is_file():
-        return FileResponse(file_path)
-
-    return Response(status_code=404, content="Not Found")
-
-
 @app.get("/health")
 async def health():
     """健康检查"""
@@ -190,3 +169,17 @@ async def api_info():
         "docs": "/docs",
         "version": "1.0.0",
     }
+
+
+# 通配路由：服务 frontend/core/, components/, pages/ 下的 JS/CSS 等静态文件
+# 必须放在所有显式路由之后，否则会拦截 /health 等路径
+@app.get("/{full_path:path}")
+async def serve_frontend(full_path: str):
+    """Catch-all 用于前端子模块（core/、components/、pages/）"""
+    # 去掉前导 /，Path 拼接需要相对路径
+    clean_path = full_path.lstrip("/")
+    file_path = frontend_dir / clean_path
+    if file_path.is_file():
+        return FileResponse(file_path)
+
+    return Response(status_code=404, content="Not Found")
