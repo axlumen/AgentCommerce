@@ -171,15 +171,9 @@ async def api_info():
     }
 
 
-# 通配路由：服务 frontend/core/, components/, pages/ 下的 JS/CSS 等静态文件
-# 必须放在所有显式路由之后，否则会拦截 /health 等路径
-@app.get("/{full_path:path}")
-async def serve_frontend(full_path: str):
-    """Catch-all 用于前端子模块（core/、components/、pages/）"""
-    # 去掉前导 /，Path 拼接需要相对路径
-    clean_path = full_path.lstrip("/")
-    file_path = frontend_dir / clean_path
-    if file_path.is_file():
-        return FileResponse(file_path)
-
-    return Response(status_code=404, content="Not Found")
+# 挂载前端子目录为静态文件（core/、components/、pages/）
+# 必须放在所有路由之后，mount 的优先级低于显式路由
+for subdir in ("core", "components", "pages"):
+    sub_path = frontend_dir / subdir
+    if sub_path.is_dir():
+        app.mount(f"/{subdir}", StaticFiles(directory=sub_path), name=subdir)
