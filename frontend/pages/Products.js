@@ -26,6 +26,16 @@ export class Products extends Component {
   }
 
   async onMount() {
+    // hash 路由下查询参数在 hash 内（如 #/products?category=手机），不在 window.location.search
+    const hash = window.location.hash.slice(1); // 去掉 #
+    const queryIdx = hash.indexOf('?');
+    if (queryIdx >= 0) {
+      const query = new URLSearchParams(hash.slice(queryIdx + 1));
+      if (query.get('category')) this.state.category = query.get('category');
+      if (query.get('sort')) this.state.sort = query.get('sort');
+      if (query.get('keyword')) this.state.keyword = query.get('keyword');
+    }
+
     await this.loadProducts();
   }
 
@@ -41,7 +51,18 @@ export class Products extends Component {
 
       if (this.state.keyword) params.keyword = this.state.keyword;
       if (this.state.category) params.category = this.state.category;
-      if (this.state.sort !== 'default') params.sort = this.state.sort;
+
+      // 映射排序参数：前端命名 → 后端 sort_by / sort_order
+      const sortMap = {
+        default:     null,
+        price_asc:   { sort_by: 'price',    sort_order: 'asc' },
+        price_desc:  { sort_by: 'price',    sort_order: 'desc' },
+        sales:       { sort_by: 'sales_count', sort_order: 'desc' },
+        new:         { sort_by: 'created_at', sort_order: 'desc' },
+      };
+      if (sortMap[this.state.sort]) {
+        Object.assign(params, sortMap[this.state.sort]);
+      }
 
       const data = await productApi.list(params);
 

@@ -15,11 +15,12 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 import logging
+import os
 import time
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from database import create_tables
@@ -101,6 +102,8 @@ frontend_dir = Path(__file__).parent / "frontend"
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
     """记录请求耗时和状态码"""
+    # DEBUG: log all incoming requests
+    print(f"DEBUG-MW: {request.method} {request.url.path}")
     start = time.time()
     response = await call_next(request)
     elapsed_ms = (time.time() - start) * 1000
@@ -152,6 +155,25 @@ async def css():
 async def js():
     """返回 JavaScript"""
     return FileResponse(frontend_dir / "app.js", media_type="application/javascript")
+
+
+# 通配路由：服务 frontend/core/, components/, pages/ 下的 JS/CSS 等静态文件
+@app.get("/{full_path:path}")
+async def serve_frontend(full_path: str):
+    """Catch-all 用于前端子模块（core/、components/、pages/）"""
+    # 跳过已有明确路由
+    reserved = {"/", "/style.css", "/app.js", "/health", "/api-info",
+                "/docs", "/redoc", "/openapi.json", "/docs/oauth2-redirect"}
+    if full_path in reserved or full_path.startswith("/api"):
+        return Response(status_code=404)
+
+    # 去掉前导 /，Path 拼接需要相对路径
+    clean_path = full_path.lstrip("/")
+    file_path = frontend_dir / clean_path
+    if file_path.is_file():
+        return FileResponse(file_path)
+
+    return Response(status_code=404, content="Not Found")
 
 
 @app.get("/health")

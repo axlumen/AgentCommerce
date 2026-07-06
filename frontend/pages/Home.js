@@ -30,8 +30,8 @@ export class Home extends Component {
       this.render();
 
       const [hotData, newData] = await Promise.all([
-        productApi.list({ page: 1, size: 8, sort: 'sales' }),
-        productApi.list({ page: 1, size: 4, sort: 'new' }),
+        productApi.list({ page: 1, size: 8, sort_by: 'sales_count', sort_order: 'desc' }),
+        productApi.list({ page: 1, size: 4, sort_by: 'created_at', sort_order: 'desc' }),
       ]);
 
       this.state.hotProducts = hotData.items || [];

@@ -88,9 +88,14 @@ export class ProductDetail extends Component {
     }
 
     const p = product;
-    const discount = p.original_price && p.original_price > p.price
-      ? Math.round((p.price / p.original_price) * 10)
+    const price = Number(p.price);
+    const originalPrice = p.original_price ? Number(p.original_price) : null;
+    const discount = originalPrice && originalPrice > price
+      ? Math.round((price / originalPrice) * 10)
       : null;
+
+    // 确保 stock 是整数
+    const stock = parseInt(p.stock, 10) || 0;
 
     this.html(`
       <div class="page page-detail">
@@ -125,9 +130,9 @@ export class ProductDetail extends Component {
 
               <!-- 价格 -->
               <div class="detail-price">
-                <span class="price-current">¥${p.price.toFixed(2)}</span>
-                ${p.original_price && p.original_price > p.price ? `
-                  <span class="price-original">¥${p.original_price.toFixed(2)}</span>
+                <span class="price-current">¥${price.toFixed(2)}</span>
+                ${originalPrice && originalPrice > price ? `
+                  <span class="price-original">¥${originalPrice.toFixed(2)}</span>
                   <span class="price-discount">${discount}折</span>
                 ` : ''}
               </div>
@@ -141,8 +146,8 @@ export class ProductDetail extends Component {
               <!-- 库存 -->
               <div class="detail-stock">
                 <span class="stock-label">库存：</span>
-                <span class="stock-value ${p.stock > 0 ? 'in-stock' : 'out-of-stock'}">
-                  ${p.stock > 0 ? `${p.stock} 件` : '暂时缺货'}
+                <span class="stock-value ${stock > 0 ? 'in-stock' : 'out-of-stock'}">
+                  ${stock > 0 ? `${stock} 件` : '暂时缺货'}
                 </span>
               </div>
 
@@ -167,15 +172,15 @@ export class ProductDetail extends Component {
                 <div class="quantity-control">
                   <button class="btn btn-outline btn-sm" id="quantity-minus" ${quantity <= 1 ? 'disabled' : ''}>-</button>
                   <input type="number" class="quantity-input" id="quantity-input" value="${quantity}" min="1" max="${p.stock}">
-                  <button class="btn btn-outline btn-sm" id="quantity-plus" ${quantity >= p.stock ? 'disabled' : ''}>+</button>
+                  <button class="btn btn-outline btn-sm" id="quantity-plus" ${quantity >= stock ? 'disabled' : ''}>+</button>
                 </div>
               </div>
 
               <!-- 操作按钮 -->
               <div class="detail-actions">
-                <button class="btn btn-primary btn-lg" id="add-to-cart" ${p.stock <= 0 ? 'disabled' : ''}>
+                <button class="btn btn-primary btn-lg" id="add-to-cart" ${stock <= 0 ? 'disabled' : ''}>
                   <span>🛒</span>
-                  <span>${p.stock > 0 ? '加入购物车' : '暂时缺货'}</span>
+                  <span>${stock > 0 ? '加入购物车' : '暂时缺货'}</span>
                 </button>
                 <button class="btn btn-outline btn-lg" id="ask-ai">
                   <span>🤖</span>
@@ -232,19 +237,21 @@ export class ProductDetail extends Component {
 
     // 数量增加
     this.on('click', '#quantity-plus', () => {
-      if (this.state.quantity < this.state.product.stock) {
+      const stock = parseInt(this.state.product.stock, 10) || 0;
+      if (this.state.quantity < stock) {
         this.state.quantity++;
         this.$('#quantity-input').value = this.state.quantity;
-        this.$('#quantity-plus').disabled = this.state.quantity >= this.state.product.stock;
+        this.$('#quantity-plus').disabled = this.state.quantity >= stock;
         this.$('#quantity-minus').disabled = false;
       }
     });
 
     // 数量输入
     this.on('change', '#quantity-input', (e) => {
+      const stock = parseInt(this.state.product.stock, 10) || 0;
       let value = parseInt(e.target.value);
       if (isNaN(value) || value < 1) value = 1;
-      if (value > this.state.product.stock) value = this.state.product.stock;
+      if (value > stock) value = stock;
       this.state.quantity = value;
       e.target.value = value;
     });

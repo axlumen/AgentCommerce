@@ -45,8 +45,9 @@ export class Cart extends Component {
     const { items, loading, error, selectedItems, submitting } = this.state;
 
     // 计算选中商品的总价
+    const price = (item) => Number(item.price || item.product_price);
     const selectedProducts = items.filter(item => selectedItems.has(item.product_id));
-    const totalPrice = selectedProducts.reduce((sum, item) => sum + item.price * item.quantity, 0);
+    const totalPrice = selectedProducts.reduce((sum, item) => sum + price(item) * item.quantity, 0);
     const totalCount = selectedProducts.reduce((sum, item) => sum + item.quantity, 0);
 
     this.html(`
@@ -94,18 +95,18 @@ export class Cart extends Component {
                     </label>
 
                     <div class="item-image">
-                      <img src="${item.image_url || '/static/default-product.png'}"
-                           alt="${item.name}"
+                      <img src="${item.product_image || item.image_url || '/static/default-product.png'}"
+                           alt="${item.product_name || item.name}"
                            onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect fill=%22%23f0f0f0%22 width=%22100%22 height=%22100%22/><text x=%2250%25%22 y=%2250%25%22 text-anchor=%22middle%22 dy=%22.3em%22 fill=%22%23999%22 font-size=%2212%22>暂无</text></svg>'">
                     </div>
 
                     <div class="item-info">
-                      <a href="#/products/${item.product_id}" class="item-name" data-link>${item.name}</a>
+                      <a href="#/products/${item.product_id}" class="item-name" data-link>${item.product_name || item.name}</a>
                       ${item.brand ? `<span class="item-brand">${item.brand}</span>` : ''}
                     </div>
 
                     <div class="item-price">
-                      <span class="price-current">¥${item.price.toFixed(2)}</span>
+                      <span class="price-current">¥${Number(item.price || item.product_price).toFixed(2)}</span>
                     </div>
 
                     <div class="item-quantity">
@@ -115,7 +116,7 @@ export class Cart extends Component {
                     </div>
 
                     <div class="item-subtotal">
-                      <span>¥${(item.price * item.quantity).toFixed(2)}</span>
+                      <span>¥${(Number(item.price || item.product_price) * item.quantity).toFixed(2)}</span>
                     </div>
 
                     <button class="btn btn-icon" data-action="delete" data-id="${item.product_id}" title="删除">
@@ -221,20 +222,14 @@ export class Cart extends Component {
         );
 
         const orderData = {
-          items: selectedProducts.map(item => ({
-            product_id: item.product_id,
-            quantity: item.quantity,
-          })),
+          cart_item_ids: selectedProducts.map(item => item.product_id),
+          address: { address: "默认地址", phone: "" },
         };
 
         const order = await orderApi.create(orderData);
         Toast.success('订单创建成功');
 
-        // 删除已结算的商品
-        for (const item of selectedProducts) {
-          await cartApi.remove(item.product_id);
-        }
-
+        // 从本地状态中移除已结算的商品
         this.state.items = this.state.items.filter(item =>
           !this.state.selectedItems.has(item.product_id)
         );

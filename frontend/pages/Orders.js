@@ -29,7 +29,7 @@ export class Orders extends Component {
       this.render();
 
       const data = await orderApi.list();
-      this.state.orders = data.orders || data || [];
+      this.state.orders = data.items || [];
     } catch (error) {
       this.state.error = error.message;
     } finally {
@@ -140,15 +140,15 @@ export class Orders extends Component {
           ${items.map(item => `
             <div class="order-item">
               <div class="item-image">
-                <img src="${item.image_url || item.product_image || '/static/default-product.png'}"
-                     alt="${item.product_name || item.name}"
+                <img src="${item.product_image || '/static/default-product.png'}"
+                     alt="${item.product_name}"
                      onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 60 60%22><rect fill=%22%23f0f0f0%22 width=%2260%22 height=%2260%22/><text x=%2250%25%22 y=%2250%25%22 text-anchor=%22middle%22 dy=%22.3em%22 fill=%22%23999%22 font-size=%2210%22>暂无</text></svg>'">
               </div>
               <div class="item-info">
-                <span class="item-name">${item.product_name || item.name}</span>
+                <span class="item-name">${item.product_name}</span>
                 <span class="item-quantity">x${item.quantity}</span>
               </div>
-              <span class="item-price">¥${(item.price * item.quantity).toFixed(2)}</span>
+              <span class="item-price">¥${Number(item.subtotal || item.product_price * item.quantity).toFixed(2)}</span>
             </div>
           `).join('')}
         </div>
@@ -158,7 +158,7 @@ export class Orders extends Component {
           <div class="order-total">
             <span>共 ${items.reduce((sum, item) => sum + item.quantity, 0)} 件商品</span>
             <span class="total-label">合计：</span>
-            <span class="total-price">¥${order.total_amount.toFixed(2)}</span>
+            <span class="total-price">¥${Number(order.total_amount).toFixed(2)}</span>
           </div>
 
           <div class="order-actions">

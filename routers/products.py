@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from database import get_db
 from dependencies import get_current_user
+from models.product import Category
 from models.user import User
 from schemas.product import ProductCreate, ProductUpdate, ProductResponse, CategoryCreate, CategoryResponse
 from services import product_service
@@ -19,6 +20,7 @@ async def list_products(
     page: int = Query(1, ge=1, description="页码"),
     size: int = Query(10, ge=1, le=100, description="每页数量"),
     category_id: int | None = Query(None, description="分类 ID"),
+    category: str | None = Query(None, description="分类名称（优先于 category_id）"),
     keyword: str | None = Query(None, description="搜索关键词"),
     is_on_sale: bool | None = Query(True, description="是否上架"),
     sort_by: str = Query("created_at", description="排序字段"),
@@ -28,9 +30,19 @@ async def list_products(
     """
     获取商品列表
 
-    支持：分页、分类筛选、关键词搜索、排序
+    支持：分页、分类筛选（ID 或名称）、关键词搜索、排序
     """
-    return product_service.get_products(db, page, size, category_id, keyword, is_on_sale, sort_by, sort_order)
+    resolved_category_id = category_id
+
+    # 优先按分类名称查找
+    if category:
+        cat = db.query(Category).filter(Category.name == category).first()
+        if cat:
+            resolved_category_id = cat.id
+        else:
+            return {"items": [], "total": 0, "page": page, "size": size, "pages": 0}
+
+    return product_service.get_products(db, page, size, resolved_category_id, keyword, is_on_sale, sort_by, sort_order)
 
 
 @router.get("/{product_id}", response_model=ProductResponse, summary="商品详情")
