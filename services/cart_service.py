@@ -6,18 +6,9 @@ import json
 
 from sqlalchemy.orm import Session
 
-from config import CART_KEY_PREFIX, CART_EXPIRE_DAYS, REDIS_HOST, REDIS_PORT, REDIS_DB
+from config import CART_KEY_PREFIX, CART_EXPIRE_DAYS
 from models.product import Product
-
-# Redis 连接（可选依赖）
-try:
-    import redis
-    redis_client = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=REDIS_DB, decode_responses=True)
-    redis_client.ping()
-    REDIS_AVAILABLE = True
-except (ImportError, Exception):
-    redis_client = None
-    REDIS_AVAILABLE = False
+from redis_client import get_redis
 
 
 def get_cart_key(user_id: int) -> str:
@@ -34,23 +25,23 @@ def add_to_cart(user_id: int, product_id: int, quantity: int) -> bool:
     - field: product:{product_id}
     - value: quantity
     """
-    if not REDIS_AVAILABLE:
+    if not get_redis():
         raise ValueError("Redis 不可用")
 
     cart_key = get_cart_key(user_id)
     field = f"product:{product_id}"
 
     # 检查商品是否已在购物车
-    existing = redis_client.hget(cart_key, field)
+    existing = get_redis().hget(cart_key, field)
     if existing:
         # 累加数量
         new_quantity = int(existing) + quantity
-        redis_client.hset(cart_key, field, new_quantity)
+        get_redis().hset(cart_key, field, new_quantity)
     else:
-        redis_client.hset(cart_key, field, quantity)
+        get_redis().hset(cart_key, field, quantity)
 
     # 设置过期时间
-    redis_client.expire(cart_key, CART_EXPIRE_DAYS * 24 * 3600)
+    get_redis().expire(cart_key, CART_EXPIRE_DAYS * 24 * 3600)
     return True
 
 
@@ -60,28 +51,28 @@ def update_cart_item(user_id: int, product_id: int, quantity: int) -> bool:
 
     quantity=0 表示删除
     """
-    if not REDIS_AVAILABLE:
+    if not get_redis():
         raise ValueError("Redis 不可用")
 
     cart_key = get_cart_key(user_id)
     field = f"product:{product_id}"
 
     if quantity == 0:
-        redis_client.hdel(cart_key, field)
+        get_redis().hdel(cart_key, field)
     else:
-        redis_client.hset(cart_key, field, quantity)
+        get_redis().hset(cart_key, field, quantity)
 
     return True
 
 
 def remove_from_cart(user_id: int, product_id: int) -> bool:
     """从购物车删除商品"""
-    if not REDIS_AVAILABLE:
+    if not get_redis():
         raise ValueError("Redis 不可用")
 
     cart_key = get_cart_key(user_id)
     field = f"product:{product_id}"
-    redis_client.hdel(cart_key, field)
+    get_redis().hdel(cart_key, field)
     return True
 
 
@@ -96,11 +87,11 @@ def get_cart(user_id: int, db: Session) -> dict:
             "selected_count": int
         }
     """
-    if not REDIS_AVAILABLE:
+    if not get_redis():
         return {"items": [], "total_amount": 0.0, "selected_count": 0}
 
     cart_key = get_cart_key(user_id)
-    cart_data = redis_client.hgetall(cart_key)
+    cart_data = get_redis().hgetall(cart_key)
 
     if not cart_data:
         return {"items": [], "total_amount": 0.0, "selected_count": 0}
@@ -138,11 +129,11 @@ def get_cart(user_id: int, db: Session) -> dict:
 
 def clear_cart(user_id: int) -> bool:
     """清空购物车"""
-    if not REDIS_AVAILABLE:
+    if not get_redis():
         return False
 
     cart_key = get_cart_key(user_id)
-    redis_client.delete(cart_key)
+    get_redis().delete(cart_key)
     return True
 
 
@@ -153,7 +144,7 @@ def get_selected_items(user_id: int, cart_item_ids: list[int], db: Session) -> l
     返回:
         [{"product_id": int, "quantity": int, "product": Product}, ...]
     """
-    if not REDIS_AVAILABLE:
+    if not get_redis():
         return []
 
     cart_key = get_cart_key(user_id)
@@ -161,7 +152,7 @@ def get_selected_items(user_id: int, cart_item_ids: list[int], db: Session) -> l
 
     for product_id in cart_item_ids:
         field = f"product:{product_id}"
-        quantity_str = redis_client.hget(cart_key, field)
+        quantity_str = get_redis().hget(cart_key, field)
         if not quantity_str:
             continue
 

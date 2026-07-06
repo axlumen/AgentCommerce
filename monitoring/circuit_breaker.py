@@ -10,22 +10,9 @@
 import logging
 import time
 
+from redis_client import get_redis
+
 logger = logging.getLogger(__name__)
-
-_redis = None
-
-
-def _get_redis():
-    global _redis
-    if _redis is None:
-        try:
-            import redis
-            from config import REDIS_HOST, REDIS_PORT, REDIS_DB
-            _redis = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=REDIS_DB, decode_responses=True)
-            _redis.ping()
-        except Exception:
-            _redis = False
-    return _redis if _redis is not False else None
 
 
 # 状态常量
@@ -62,7 +49,7 @@ class CircuitBreaker:
 
     def _get(self, field: str, default: str = "") -> str:
         """获取 Redis 字段"""
-        r = _get_redis()
+        r = get_redis()
         if not r:
             return default
         try:
@@ -73,7 +60,7 @@ class CircuitBreaker:
 
     def _set(self, field: str, value: str, ttl: int | None = None) -> None:
         """设置 Redis 字段"""
-        r = _get_redis()
+        r = get_redis()
         if not r:
             return
         try:
@@ -87,7 +74,7 @@ class CircuitBreaker:
 
     def _incr(self, field: str) -> int:
         """递增 Redis 计数器"""
-        r = _get_redis()
+        r = get_redis()
         if not r:
             return 0
         try:
@@ -188,7 +175,7 @@ class CircuitBreaker:
 
     def _on_failure(self) -> None:
         """失败回调"""
-        r = _get_redis()
+        r = get_redis()
         if not r:
             return
 
@@ -222,7 +209,7 @@ class CircuitBreaker:
 
     def reset(self) -> None:
         """手动重置熔断器"""
-        r = _get_redis()
+        r = get_redis()
         if not r:
             return
         try:

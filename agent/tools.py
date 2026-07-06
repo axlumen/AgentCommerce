@@ -44,25 +44,28 @@ def reset_request_context(db_token: contextvars.Token) -> None:
 
 
 # ============================================================
-# 工具调用记录
+# 工具调用记录（request-scoped，线程安全）
 # ============================================================
 
-_tool_call_log: list[dict] = []
+_tool_call_log: contextvars.ContextVar[list[dict]] = contextvars.ContextVar(
+    "tool_call_log", default=[]
+)
 
 
 def get_tool_call_log() -> list[dict]:
     """获取当前请求的工具调用记录"""
-    return _tool_call_log.copy()
+    return list(_tool_call_log.get())
 
 
 def clear_tool_call_log() -> None:
-    """清空工具调用记录"""
-    _tool_call_log.clear()
+    """清空工具调用记录（新请求开始时调用）"""
+    _tool_call_log.set([])
 
 
 def _record(tool_name: str, args: dict, result: Any, duration_ms: float) -> None:
     """记录工具调用"""
-    _tool_call_log.append({
+    log = _tool_call_log.get()
+    log.append({
         "tool": tool_name,
         "args": args,
         "result": json.dumps(result, ensure_ascii=False) if not isinstance(result, str) else result,
@@ -366,6 +369,76 @@ def get_user_preferences() -> str:
         return json.dumps({"error": f"获取偏好失败: {str(e)}"}, ensure_ascii=False)
 
 
+@tool
+def compare_products(product_ids: str) -> str:
+    """
+    比较多个商品的价格、库存、规格。用于用户想对比不同商品时。
+
+    Args:
+        product_ids: 商品 ID 列表，逗号分隔（如 "1,2,3"）
+    """
+    start_time = time.time()
+    db = _db_context.get()
+
+    try:
+        # 解析 ID 列表
+        ids = [int(id.strip()) for id in product_ids.split(",") if id.strip()]
+        if not ids or len(ids) < 2:
+            return json.dumps({"error": "请至少提供 2 个商品 ID"}, ensure_ascii=False)
+        if len(ids) > 5:
+            return json.dumps({"error": "最多比较 5 个商品"}, ensure_ascii=False)
+
+        # 查询商品
+        products = db.query(Product).filter(Product.id.in_(ids)).all()
+        if not products:
+            return json.dumps({"error": "未找到商品"}, ensure_ascii=False)
+
+        # 构建对比数据
+        items = []
+        for p in products:
+            item = {
+                "id": p.id,
+                "name": p.name,
+                "price": float(p.price),
+                "original_price": float(p.original_price) if p.original_price else None,
+                "stock": p.stock,
+                "brand": p.brand or "未知",
+                "sales_count": p.sales_count,
+                "is_on_sale": p.is_on_sale,
+            }
+            # 计算折扣
+            if p.original_price and p.original_price > p.price:
+                item["discount"] = round(float(p.price) / float(p.original_price) * 100, 1)
+            items.append(item)
+
+        # 按价格排序
+        items.sort(key=lambda x: x["price"])
+
+        # 找出最优项
+        cheapest = items[0]
+        most_stock = max(items, key=lambda x: x["stock"])
+        most_sales = max(items, key=lambda x: x["sales_count"])
+
+        result = {
+            "total": len(items),
+            "items": items,
+            "summary": {
+                "cheapest": {"id": cheapest["id"], "name": cheapest["name"], "price": cheapest["price"]},
+                "most_stock": {"id": most_stock["id"], "name": most_stock["name"], "stock": most_stock["stock"]},
+                "most_popular": {"id": most_sales["id"], "name": most_sales["name"], "sales": most_sales["sales_count"]},
+            }
+        }
+
+        _record("compare_products", {"product_ids": product_ids}, result, (time.time() - start_time) * 1000)
+        return json.dumps(result, ensure_ascii=False)
+
+    except ValueError:
+        return json.dumps({"error": "商品 ID 必须是数字"}, ensure_ascii=False)
+    except Exception as e:
+        logger.exception("compare_products failed")
+        return json.dumps({"error": f"比较失败: {str(e)}"}, ensure_ascii=False)
+
+
 # 工具列表（供 graph.py 使用）
 TOOL_LIST = [
     search_products,
@@ -374,6 +447,7 @@ TOOL_LIST = [
     calculate_final_price,
     add_to_cart,
     get_user_preferences,
+    compare_products,
 ]
 
 TOOLS_BY_NAME = {t.name: t for t in TOOL_LIST}

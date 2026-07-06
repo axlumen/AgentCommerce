@@ -9,22 +9,9 @@ import logging
 import time
 import uuid
 
+from redis_client import get_redis
+
 logger = logging.getLogger(__name__)
-
-_redis = None
-
-
-def _get_redis():
-    global _redis
-    if _redis is None:
-        try:
-            import redis
-            from config import REDIS_HOST, REDIS_PORT, REDIS_DB
-            _redis = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=REDIS_DB, decode_responses=True)
-            _redis.ping()
-        except Exception:
-            _redis = False
-    return _redis if _redis is not False else None
 
 
 class RateLimiter:
@@ -61,7 +48,7 @@ class RateLimiter:
             - allowed: True=允许, False=拒绝
             - info: {"current": int, "limit": int, "reset_at": float}
         """
-        r = _get_redis()
+        r = get_redis()
         if not r:
             # Redis 不可用时放行
             return True, {"current": 0, "limit": limit, "reset_at": 0, "fallback": True}
@@ -105,7 +92,7 @@ class RateLimiter:
 
     def get_usage(self, identifier: str, window_seconds: int = 60) -> int:
         """获取当前窗口内的请求数"""
-        r = _get_redis()
+        r = get_redis()
         if not r:
             return 0
 
@@ -121,7 +108,7 @@ class RateLimiter:
 
     def reset(self, identifier: str) -> None:
         """重置指定标识的限流计数"""
-        r = _get_redis()
+        r = get_redis()
         if not r:
             return
 

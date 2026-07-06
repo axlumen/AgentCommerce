@@ -20,22 +20,9 @@ import uuid
 
 import numpy as np
 
+from redis_client import get_redis
+
 logger = logging.getLogger(__name__)
-
-_redis = None
-
-
-def _get_redis():
-    global _redis
-    if _redis is None:
-        try:
-            import redis
-            from config import REDIS_HOST, REDIS_PORT, REDIS_DB
-            _redis = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=REDIS_DB, decode_responses=True)
-            _redis.ping()
-        except Exception:
-            _redis = False
-    return _redis if _redis is not False else None
 
 
 class SemanticCache:
@@ -79,7 +66,7 @@ class SemanticCache:
         Returns:
             缓存的响应字典，未命中返回 None
         """
-        r = _get_redis()
+        r = get_redis()
         if not r:
             return None
 
@@ -164,7 +151,7 @@ class SemanticCache:
         Returns:
             cache_id，失败返回 None
         """
-        r = _get_redis()
+        r = get_redis()
         if not r:
             return None
 
@@ -221,7 +208,7 @@ class SemanticCache:
         Returns:
             清除的缓存条目数
         """
-        r = _get_redis()
+        r = get_redis()
         if not r:
             return 0
 
@@ -249,7 +236,7 @@ class SemanticCache:
 
     def invalidate_all(self) -> None:
         """清除所有缓存"""
-        r = _get_redis()
+        r = get_redis()
         if not r:
             return
 
@@ -274,7 +261,7 @@ class SemanticCache:
 
     def stats(self) -> dict:
         """获取缓存统计"""
-        r = _get_redis()
+        r = get_redis()
         if not r:
             return {"available": False}
 
@@ -299,7 +286,7 @@ class SemanticCache:
 
     def _incr_stat(self, field: str) -> None:
         """递增统计计数器"""
-        r = _get_redis()
+        r = get_redis()
         if r:
             try:
                 r.incr(f"{self.STATS_PREFIX}{field}")

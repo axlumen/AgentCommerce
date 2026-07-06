@@ -43,35 +43,66 @@ class VectorStore:
         if self._embedding_fn is not None:
             return self._embedding_fn
 
-        # 尝试 OpenAI
-        try:
-            from openai import OpenAI
-            api_key = os.getenv("OPENAI_API_KEY")
-            if api_key:
-                client_kwargs = {"api_key": api_key}
-                base_url = os.getenv("OPENAI_BASE_URL")
-                if base_url:
-                    client_kwargs["base_url"] = base_url
-                client = OpenAI(**client_kwargs)
+        from config import (
+            RAG_EMBEDDING_MODEL,
+            RAG_EMBEDDING_DIMENSION,
+            RAG_EMBEDDING_PROVIDER,
+            DASHSCOPE_API_KEY,
+            DASHSCOPE_BASE_URL,
+        )
 
-                from config import RAG_EMBEDDING_MODEL
+        # 1. 通义千问 DashScope（支持 qwen3-vl-embedding）
+        if RAG_EMBEDDING_PROVIDER == "dashscope" and DASHSCOPE_API_KEY:
+            try:
+                from openai import OpenAI
+                client = OpenAI(
+                    api_key=DASHSCOPE_API_KEY,
+                    base_url=DASHSCOPE_BASE_URL,
+                )
 
-                def openai_embed(texts: list[str]) -> np.ndarray:
+                def dashscope_embed(texts: list[str]) -> np.ndarray:
                     response = client.embeddings.create(
                         model=RAG_EMBEDDING_MODEL,
                         input=texts,
                     )
                     return np.array([item.embedding for item in response.data], dtype=np.float32)
 
-                self._embedding_fn = openai_embed
-                self._embedding_model_type = "openai"
-                self.dimension = 1536  # text-embedding-3-small dimension
-                logger.info("Using OpenAI embeddings")
+                self._embedding_fn = dashscope_embed
+                self._embedding_model_type = "dashscope"
+                self.dimension = RAG_EMBEDDING_DIMENSION
+                logger.info(f"Using DashScope embeddings: {RAG_EMBEDDING_MODEL} (dim={self.dimension})")
                 return self._embedding_fn
-        except Exception as e:
-            logger.warning(f"OpenAI embedding not available: {e}")
+            except Exception as e:
+                logger.warning(f"DashScope embedding not available: {e}")
 
-        # 降级：sentence-transformers
+        # 2. OpenAI
+        if RAG_EMBEDDING_PROVIDER == "openai":
+            try:
+                from openai import OpenAI
+                api_key = os.getenv("OPENAI_API_KEY")
+                if api_key:
+                    client_kwargs = {"api_key": api_key}
+                    base_url = os.getenv("OPENAI_BASE_URL")
+                    if base_url:
+                        client_kwargs["base_url"] = base_url
+                    client = OpenAI(**client_kwargs)
+
+                    def openai_embed(texts: list[str]) -> np.ndarray:
+                        response = client.embeddings.create(
+                            model=RAG_EMBEDDING_MODEL,
+                            input=texts,
+                        )
+                        return np.array([item.embedding for item in response.data], dtype=np.float32)
+
+                    self._embedding_fn = openai_embed
+                    self._embedding_model_type = "openai"
+                    self.dimension = RAG_EMBEDDING_DIMENSION
+                    logger.info(f"Using OpenAI embeddings: {RAG_EMBEDDING_MODEL}")
+                    return self._embedding_fn
+            except Exception as e:
+                logger.warning(f"OpenAI embedding not available: {e}")
+
+        # 3. 本地 sentence-transformers
         try:
             from sentence_transformers import SentenceTransformer
             model = SentenceTransformer("all-MiniLM-L6-v2")
@@ -87,7 +118,7 @@ class VectorStore:
         except Exception as e:
             logger.warning(f"Local embedding not available: {e}")
 
-        raise EmbeddingError("No embedding model available. Install openai or sentence-transformers.")
+        raise EmbeddingError("No embedding model available. Configure DASHSCOPE_API_KEY or install sentence-transformers.")
 
     def build_index(self, products: list[dict]) -> None:
         """

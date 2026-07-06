@@ -6,6 +6,14 @@
 """
 
 import os
+from pathlib import Path
+
+# 加载 .env 文件（本地开发用，Docker 环境通过 env_file 加载）
+try:
+    from dotenv import load_dotenv
+    load_dotenv(Path(__file__).parent / ".env", override=True)
+except ImportError:
+    pass  # python-dotenv 未安装时跳过
 
 # MySQL 配置
 MYSQL_USER = os.getenv("MYSQL_USER", "root")
@@ -38,7 +46,7 @@ CART_EXPIRE_DAYS = 7  # 购物车 7 天过期
 ORDER_TIMEOUT_MINUTES = 30  # 订单 30 分钟未支付自动取消
 
 # Agent 配置
-AGENT_MODEL = os.getenv("AGENT_MODEL", "mimo-2.5-pro")
+AGENT_MODEL = os.getenv("AGENT_MODEL", "mimo-v2.5-pro")
 AGENT_MAX_ITERATIONS = 10
 AGENT_TOOL_TIMEOUT = 30
 AGENT_CONTEXT_WINDOW = 20
@@ -53,7 +61,17 @@ RAG_GAMMA = 0.4
 RAG_TOP_K_BM25 = 20
 RAG_TOP_K_VECTOR = 20
 RAG_TOP_K_FINAL = 5
-RAG_EMBEDDING_MODEL = os.getenv("RAG_EMBEDDING_MODEL", "text-embedding-3-small")
+
+# Embedding 模型配置
+# 支持: "text-embedding-3-small" (OpenAI), "qwen3-vl-embedding" (通义千问), "all-MiniLM-L6-v2" (本地)
+RAG_EMBEDDING_MODEL = os.getenv("RAG_EMBEDDING_MODEL", "qwen3-vl-embedding")
+RAG_EMBEDDING_DIMENSION = int(os.getenv("RAG_EMBEDDING_DIMENSION", "1024"))  # qwen3-vl-embedding 维度
+RAG_EMBEDDING_PROVIDER = os.getenv("RAG_EMBEDDING_PROVIDER", "dashscope")  # openai, dashscope, local
+
+# 通义千问 DashScope 配置
+DASHSCOPE_API_KEY = os.getenv("DASHSCOPE_API_KEY", "")
+DASHSCOPE_BASE_URL = os.getenv("DASHSCOPE_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1")
+
 RAG_RERANKER_MODEL = os.getenv("RAG_RERANKER_MODEL", "cross-encoder/ms-marco-MiniLM-L6-v2")
 RAG_FAISS_INDEX_PATH = "data/faiss_index.bin"
 RAG_SYNONYM_PATH = "data/synonyms.json"

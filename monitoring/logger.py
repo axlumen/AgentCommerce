@@ -14,23 +14,9 @@ import time
 from dataclasses import dataclass, field, asdict
 from datetime import datetime
 
+from redis_client import get_redis
+
 logger = logging.getLogger(__name__)
-
-# Redis 客户端（延迟初始化）
-_redis = None
-
-
-def _get_redis():
-    global _redis
-    if _redis is None:
-        try:
-            import redis
-            from config import REDIS_HOST, REDIS_PORT, REDIS_DB
-            _redis = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=REDIS_DB, decode_responses=True)
-            _redis.ping()
-        except Exception:
-            _redis = False
-    return _redis if _redis is not False else None
 
 
 # ============================================================
@@ -149,7 +135,7 @@ STATS_PREFIX = "ai:stats:"
 
 def _update_stats(call_log: AICallLog) -> None:
     """更新 Redis 统计计数器"""
-    r = _get_redis()
+    r = get_redis()
     if not r:
         return
 
@@ -202,7 +188,7 @@ def get_stats() -> dict:
             "avg_output_tokens": float,
         }
     """
-    r = _get_redis()
+    r = get_redis()
     if not r:
         return {"error": "Redis not available"}
 
@@ -241,7 +227,7 @@ def get_stats() -> dict:
 
 def get_stats_by_date(date_str: str) -> dict:
     """获取指定日期的调用次数"""
-    r = _get_redis()
+    r = get_redis()
     if not r:
         return {"error": "Redis not available"}
 
@@ -254,7 +240,7 @@ def get_stats_by_date(date_str: str) -> dict:
 
 def reset_stats() -> None:
     """重置所有统计（测试用）"""
-    r = _get_redis()
+    r = get_redis()
     if not r:
         return
 

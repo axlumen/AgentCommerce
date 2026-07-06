@@ -21,6 +21,7 @@ TOOL_PERMISSIONS: dict[str, str] = {
     "calculate_final_price": "read",
     "add_to_cart": "write",
     "get_user_preferences": "read",
+    "compare_products": "read",
 }
 
 # 需要用户确认的工具
@@ -172,6 +173,12 @@ def validate_tool_args(tool_name: str, args: dict) -> dict:
 
     elif tool_name == "get_user_preferences":
         pass  # 无需参数
+
+    elif tool_name == "compare_products":
+        product_ids = args.get("product_ids", "")
+        if not isinstance(product_ids, str) or len(product_ids) > 50:
+            raise ValueError("商品 ID 列表无效")
+        validated["product_ids"] = sanitize_input(product_ids, max_length=50)
 
     else:
         raise ValueError(f"未知工具: {tool_name}")

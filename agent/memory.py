@@ -11,28 +11,10 @@ import json
 import logging
 from datetime import datetime
 
-from config import (
-    AGENT_CONTEXT_WINDOW,
-    AGENT_SESSION_TTL,
-    REDIS_HOST,
-    REDIS_PORT,
-    REDIS_DB,
-)
+from config import AGENT_CONTEXT_WINDOW, AGENT_SESSION_TTL
+from redis_client import get_redis
 
 logger = logging.getLogger(__name__)
-
-# Redis 连接（复用 cart_service 的模式）
-try:
-    import redis
-
-    _redis_client = redis.Redis(
-        host=REDIS_HOST, port=REDIS_PORT, db=REDIS_DB, decode_responses=True
-    )
-    _redis_client.ping()
-    REDIS_AVAILABLE = True
-except (ImportError, Exception):
-    _redis_client = None
-    REDIS_AVAILABLE = False
 
 
 class MemoryManager:
@@ -40,7 +22,10 @@ class MemoryManager:
 
     def __init__(self, max_short_term_messages: int = AGENT_CONTEXT_WINDOW):
         self.max_messages = max_short_term_messages
-        self.redis = _redis_client
+
+    @property
+    def redis(self):
+        return get_redis()
 
     # ============================================================
     # 短期记忆：对话上下文
@@ -57,7 +42,7 @@ class MemoryManager:
         Returns:
             消息列表 [{"role": str, "content": str}, ...]
         """
-        if not REDIS_AVAILABLE or not self.redis:
+        if not self.redis:
             return []
 
         key = self._session_key(session_id)
@@ -77,7 +62,7 @@ class MemoryManager:
 
         自动应用滑动窗口截断。
         """
-        if not REDIS_AVAILABLE or not self.redis:
+        if not self.redis:
             return
 
         # 滑动窗口：只保留最近 N 条消息
@@ -106,7 +91,7 @@ class MemoryManager:
 
     def clear_short_term(self, session_id: str) -> None:
         """清除会话的短期记忆"""
-        if not REDIS_AVAILABLE or not self.redis:
+        if not self.redis:
             return
 
         key = self._session_key(session_id)
@@ -133,7 +118,7 @@ class MemoryManager:
                 "last_updated": "2024-01-01T00:00:00"
             }
         """
-        if not REDIS_AVAILABLE or not self.redis:
+        if not self.redis:
             return {}
 
         key = self._preferences_key(user_id)
@@ -155,7 +140,7 @@ class MemoryManager:
             user_id: 用户 ID
             new_prefs: 新增/更新的偏好
         """
-        if not REDIS_AVAILABLE or not self.redis:
+        if not self.redis:
             return
 
         existing = self.get_user_preferences(user_id)

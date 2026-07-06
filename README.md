@@ -300,6 +300,7 @@ AgentCommerce/
 ├── main.py                     # FastAPI 入口 + RAG 索引构建 + 请求日志中间件
 ├── config.py                   # 配置（环境变量读取）
 ├── database.py                 # MySQL 连接池
+├── redis_client.py             # 共享 Redis 客户端
 ├── dependencies.py             # JWT 认证依赖注入
 ├── Dockerfile                  # Docker 镜像构建
 ├── docker-compose.yml          # 一键部署（App + MySQL + Redis）
@@ -309,9 +310,10 @@ AgentCommerce/
 │   ├── state.py                #   Agent 状态定义
 │   ├── tools.py                #   6 个业务工具（上下文变量传递 DB）
 │   ├── graph.py                #   LangGraph ReAct 图（并行工具执行）
+│   ├── llm.py                  #   LLM 客户端管理（缓存单例）
+│   ├── prompts.py              #   提示词与消息构建
 │   ├── memory.py               #   记忆系统（短期/长期）
-│   ├── security.py             #   安全控制（权限/注入/校验）
-│   └── async_tools.py          #   异步工具执行器
+│   └── security.py             #   安全控制（权限/注入/校验）
 │
 ├── rag/                        # RAG 三级混合检索（9 文件，1785 行）
 │   ├── tokenizer.py            #   jieba 分词 + 同义词扩展

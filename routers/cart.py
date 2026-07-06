@@ -9,6 +9,7 @@ from database import get_db
 from dependencies import get_current_user
 from models.user import User
 from schemas.cart import CartAddRequest, CartUpdateRequest, CartResponse
+from redis_client import get_redis
 from services import cart_service
 
 router = APIRouter(prefix="/cart", tags=["购物车"])
@@ -20,7 +21,7 @@ async def get_cart(
     db: Session = Depends(get_db),
 ):
     """获取当前用户的购物车"""
-    if not cart_service.REDIS_AVAILABLE:
+    if not get_redis():
         return {"items": [], "total_amount": 0.0, "selected_count": 0}
     return cart_service.get_cart(current_user.id, db)
 
@@ -33,7 +34,7 @@ async def add_to_cart(
 ):
     """添加商品到购物车"""
     # 检查 Redis 可用性
-    if not cart_service.REDIS_AVAILABLE:
+    if not get_redis():
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="购物车服务不可用（Redis 未启动）"
