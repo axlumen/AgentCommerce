@@ -61,6 +61,7 @@
 | **Zustand** | 状态管理（auth / cart / ui） |
 | **TanStack Query** | 服务端状态管理 + 缓存 |
 | **next-themes** | 深色模式切换 |
+| **react-markdown + remark-gfm** | Markdown 渲染（支持 GFM 表格） |
 
 ### 后端
 
@@ -161,7 +162,7 @@ docker-compose down -v        # 停止并删除数据卷（MySQL 数据会丢失
 
 > 包含三个服务：App（FastAPI）+ MySQL 8.0 + Redis 7，数据库自动初始化。
 
-导入种子数据（可选，35 个演示商品）：
+导入种子数据（可选，77 个中文演示商品，覆盖美妆/香水/家具/食品/家居/厨房 6 大品类）：
 
 ```bash
 docker-compose exec app python -m scripts.seed_data
@@ -215,7 +216,7 @@ export OPENAI_API_KEY=sk-xxx
 # 启动 Redis
 redis-server
 
-# 导入种子数据（可选，35 个演示商品）
+# 导入种子数据（可选，77 个中文演示商品）
 python -m scripts.seed_data
 
 # 启动后端
@@ -367,8 +368,7 @@ AgentCommerce/
 ├── data/                       # 测试集 + 索引文件
 │   └── test_set.json           #   50 条评估问答对
 └── scripts/
-    ├── seed_data.py            #   商品种子数据（35 个热销商品）
-    └── run_evaluation.py       #   RAG 评估脚本
+    └── seed_data.py            #   商品种子数据（77 个中文商品，6 大品类）
 ```
 
 ## 🔧 设计决策
@@ -381,7 +381,7 @@ AgentCommerce/
 | 4 | **ReAct Agent** | LangGraph 实现思考→行动→观察循环，支持多工具编排 |
 | 5 | **Human-in-the-loop** | 敏感操作（加购）通过 interrupt 暂停，等待用户确认 |
 | 6 | **三级检索融合** | BM25(0.3) + Vector(0.3) + Reranker(0.4) 加权融合 |
-| 7 | **同义词扩展** | 电商同义词表（手机=智能手机=移动电话），提升召回率 |
+| 7 | **同义词扩展** | 电商同义词表（手机=智能手机=移动电话），中英文同义词映射，提升召回率 |
 | 8 | **语义缓存** | embedding 余弦相似度 ≥ 0.9 返回缓存，商品更新自动失效 |
 | 9 | **熔断器** | 连续 5 次失败 → OPEN，60s 后 HALF_OPEN 试探，成功 → CLOSED |
 | 10 | **并行工具执行** | ThreadPoolExecutor + contextvars.copy_context() 并行调用多个工具 |
