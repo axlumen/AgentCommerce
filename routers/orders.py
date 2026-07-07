@@ -116,3 +116,21 @@ async def confirm_order(
         return order
     except BusinessError as e:
         raise HTTPException(status_code=e.status_code, detail=str(e))
+
+
+@router.delete("/{order_id}", summary="删除订单")
+async def delete_order(
+    order_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    删除订单（仅 pending 或 cancelled 状态可删除）
+
+    删除待支付订单时会自动回滚库存
+    """
+    try:
+        order_service.delete_order(db, order_id, current_user.id)
+        return {"message": "订单已删除"}
+    except BusinessError as e:
+        raise HTTPException(status_code=e.status_code, detail=str(e))

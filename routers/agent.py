@@ -295,7 +295,14 @@ async def agent_chat_stream(
                 ),
             }
 
-    return EventSourceResponse(event_generator())
+    return EventSourceResponse(
+        event_generator(),
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",  # 禁用 Nginx 缓冲
+        },
+    )
 
 
 @router.post("/confirm", response_model=ChatResponse)

@@ -46,12 +46,13 @@ logger = logging.getLogger(__name__)
 # ============================================================
 
 
-def agent_node(state: AgentState) -> dict:
+async def agent_node(state: AgentState) -> dict:
     """
     Agent 节点：调用 LLM 决定下一步行动
 
     ReAct 模式中的"思考"阶段。
     集成：熔断器保护 + AI 调用日志 + 决策追踪。
+    使用异步调用以支持流式输出（astream_events）。
     """
     from monitoring.circuit_breaker import CircuitOpenError, ai_circuit_breaker
     from monitoring.logger import AICallLog, AgentTrace, log_ai_call, log_agent_trace
@@ -71,12 +72,12 @@ def agent_node(state: AgentState) -> dict:
     start_time = time.time()
 
     try:
-        # 通过熔断器调用 LLM
-        def _call_llm():
+        # 通过熔断器调用 LLM（异步，支持流式输出）
+        async def _call_llm():
             llm_with_tools = get_llm_with_tools()
-            return llm_with_tools.invoke(full_messages)
+            return await llm_with_tools.ainvoke(full_messages)
 
-        response = ai_circuit_breaker.call(_call_llm)
+        response = await ai_circuit_breaker.call_async(_call_llm)
         elapsed_ms = (time.time() - start_time) * 1000
 
         # 记录 AI 调用日志

@@ -1,6 +1,9 @@
 import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
+  // 允许跨域访问开发资源（Next.js 16+）
+  allowedDevOrigins: ['127.0.0.1'],
+
   // Docker 构建使用 standalone 模式
   output: 'standalone',
 
@@ -10,6 +13,14 @@ const nextConfig: NextConfig = {
       {
         source: '/api/:path*',
         destination: 'http://localhost:8000/api/:path*',
+      },
+      {
+        source: '/docs',
+        destination: 'http://localhost:8000/docs',
+      },
+      {
+        source: '/openapi.json',
+        destination: 'http://localhost:8000/openapi.json',
       },
     ];
   },

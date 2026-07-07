@@ -31,7 +31,7 @@ class Order(Base):
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
 
     # 关联
-    items = relationship("OrderItem", back_populates="order", lazy="joined")
+    items = relationship("OrderItem", back_populates="order", lazy="joined", cascade="all, delete-orphan")
 
 
 class OrderItem(Base):

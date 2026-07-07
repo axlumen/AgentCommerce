@@ -177,3 +177,34 @@ def update_order_status(db: Session, order_id: int, target_status: str, user_id:
     db.refresh(order)
     return order
 
+
+def delete_order(db: Session, order_id: int, user_id: int) -> None:
+    """
+    删除订单（仅 pending 或 cancelled 状态可删除）
+
+    异常:
+        NotFoundError: 订单不存在
+        ConflictError: 订单状态不允许删除
+    """
+    order = db.query(Order).filter(
+        Order.id == order_id,
+        Order.user_id == user_id,
+    ).first()
+
+    if not order:
+        raise NotFoundError("订单不存在")
+
+    # 只允许删除待支付或已取消的订单
+    if order.status not in ("pending", "cancelled"):
+        raise ConflictError("只有待支付或已取消的订单可以删除")
+
+    # 如果是待支付订单，需要先回滚库存
+    if order.status == "pending":
+        for item in order.items:
+            db.query(Product).filter(Product.id == item.product_id).update(
+                {"stock": Product.stock + item.quantity}
+            )
+
+    db.delete(order)
+    db.commit()
+

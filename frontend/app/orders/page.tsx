@@ -15,7 +15,7 @@ import { ProductImage } from '@/components/product/ProductImage';
 import { api, type Order } from '@/lib/api';
 import { useRequireAuth } from '@/hooks/useAuth';
 import { formatPrice, formatDate, getOrderStatusText, getOrderStatusColor } from '@/lib/utils';
-import { Package, CreditCard, XCircle, CheckCircle, Loader2 } from 'lucide-react';
+import { Package, CreditCard, XCircle, CheckCircle, Loader2, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function OrdersPage() {
@@ -43,7 +43,7 @@ export default function OrdersPage() {
   }, [isAuthenticated, fetchOrders]);
 
   const handleOrderAction = async (
-    action: 'pay' | 'cancel' | 'confirm',
+    action: 'pay' | 'cancel' | 'confirm' | 'delete',
     orderId: number,
     successMessage: string
   ) => {
@@ -169,6 +169,21 @@ export default function OrdersPage() {
                           <Button size="sm" onClick={() => handleOrderAction('confirm', order.id, '已确认收货')}>
                             <CheckCircle className="mr-2 h-4 w-4" />
                             确认收货
+                          </Button>
+                        )}
+                        {(order.status === 'pending' || order.status === 'cancelled') && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-muted-foreground hover:text-destructive"
+                            onClick={() => {
+                              if (window.confirm('确定要删除此订单吗？')) {
+                                handleOrderAction('delete', order.id, '订单已删除');
+                              }
+                            }}
+                          >
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            删除
                           </Button>
                         )}
                       </div>

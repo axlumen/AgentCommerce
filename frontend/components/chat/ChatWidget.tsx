@@ -5,6 +5,8 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
+import Markdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -281,7 +283,57 @@ export function ChatWidget() {
                         : 'bg-muted'
                     )}
                   >
-                    {msg.content}
+                    {/* 思考中状态 */}
+                    {msg.role === 'assistant' &&
+                      !msg.content &&
+                      isLoading &&
+                      msg.id === messages[messages.length - 1]?.id && (
+                        <div className="flex items-center gap-1.5 text-muted-foreground">
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                          <span>思考中...</span>
+                        </div>
+                      )}
+                    {/* 消息内容：助手用 Markdown 渲染，用户用纯文本 */}
+                    {msg.role === 'assistant' ? (
+                      <div className="prose prose-sm dark:prose-invert max-w-none break-words">
+                        <Markdown
+                          remarkPlugins={[remarkGfm]}
+                          components={{
+                            p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+                            ul: ({ children }) => <ul className="list-disc pl-4 mb-2">{children}</ul>,
+                            ol: ({ children }) => <ol className="list-decimal pl-4 mb-2">{children}</ol>,
+                            li: ({ children }) => <li className="mb-0.5">{children}</li>,
+                            code: ({ children, className }) => {
+                              const isInline = !className;
+                              return isInline ? (
+                                <code className="bg-muted-foreground/20 px-1 py-0.5 rounded text-xs">{children}</code>
+                              ) : (
+                                <code className={className}>{children}</code>
+                              );
+                            },
+                            strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+                            table: ({ children }) => (
+                              <div className="overflow-x-auto my-2">
+                                <table className="w-full text-xs border-collapse">{children}</table>
+                              </div>
+                            ),
+                            thead: ({ children }) => <thead className="bg-muted/50">{children}</thead>,
+                            tbody: ({ children }) => <tbody>{children}</tbody>,
+                            tr: ({ children }) => <tr className="border-b border-border last:border-0">{children}</tr>,
+                            th: ({ children }) => (
+                              <th className="px-2 py-1.5 text-left font-semibold whitespace-nowrap">{children}</th>
+                            ),
+                            td: ({ children }) => (
+                              <td className="px-2 py-1.5 whitespace-nowrap">{children}</td>
+                            ),
+                          }}
+                        >
+                          {msg.content}
+                        </Markdown>
+                      </div>
+                    ) : (
+                      msg.content
+                    )}
                     {/* 流式光标 */}
                     {isStreaming &&
                       msg.role === 'assistant' &&
@@ -303,16 +355,6 @@ export function ChatWidget() {
                   )}
                 </div>
               ))}
-              {isLoading && (
-                <div className="flex gap-2 justify-start">
-                  <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                    <Bot className="h-4 w-4 text-primary" />
-                  </div>
-                  <div className="bg-muted rounded-lg px-3 py-2">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  </div>
-                </div>
-              )}
               <div ref={messagesEndRef} />
             </div>
           )}

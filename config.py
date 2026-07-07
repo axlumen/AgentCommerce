@@ -90,7 +90,7 @@ CIRCUIT_BREAKER_THRESHOLD = 5
 CIRCUIT_BREAKER_RECOVERY_TIMEOUT = 60
 
 # CORS 配置
-CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000")
+CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000")
 
 # Agent 工具并发配置
 AGENT_MAX_TOOL_WORKERS = int(os.getenv("AGENT_MAX_TOOL_WORKERS", "4"))

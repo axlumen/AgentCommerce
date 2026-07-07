@@ -14,13 +14,14 @@ logger = logging.getLogger(__name__)
 
 @functools.lru_cache(maxsize=1)
 def get_llm():
-    """获取 LLM 客户端（缓存单例）"""
+    """获取 LLM 客户端（缓存单例，启用流式输出）"""
     from langchain_openai import ChatOpenAI
 
     return ChatOpenAI(
         model=AGENT_MODEL,
         temperature=0.3,
         timeout=AGENT_TOOL_TIMEOUT,
+        streaming=True,  # 启用流式输出，支持 astream_events 捕获 token 事件
     )
 
 

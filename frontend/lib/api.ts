@@ -10,6 +10,12 @@ const API_BASE =
     ? (process.env.NEXT_PUBLIC_API_URL || '')
     : (process.env.API_INTERNAL_URL || 'http://localhost:8000');
 
+// 流式请求直接调用后端，避免 Next.js 代理缓冲 SSE
+const STREAM_BASE =
+  typeof window !== 'undefined'
+    ? (process.env.NEXT_PUBLIC_STREAM_URL || 'http://localhost:8000')
+    : (process.env.API_INTERNAL_URL || 'http://localhost:8000');
+
 interface ApiResponse<T> {
   data: T;
   error?: string;
@@ -273,6 +279,8 @@ export const api = {
       fetchApi<Order>(`/api/orders/${id}/cancel`, { method: 'PUT' }),
     confirm: (id: number) =>
       fetchApi<Order>(`/api/orders/${id}/confirm`, { method: 'PUT' }),
+    delete: (id: number) =>
+      fetchApi<void>(`/api/orders/${id}`, { method: 'DELETE' }),
   },
 
   // Agent
@@ -297,7 +305,7 @@ export const api = {
         headers['Authorization'] = `Bearer ${token}`;
       }
 
-      const response = await fetch(`${API_BASE}/api/agent/chat/stream`, {
+      const response = await fetch(`${STREAM_BASE}/api/agent/chat/stream`, {
         method: 'POST',
         headers,
         body: JSON.stringify(data),
