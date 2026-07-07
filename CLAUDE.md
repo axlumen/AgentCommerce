@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 项目概述
 
-AI 智能导购电商平台，Next.js 前端 + FastAPI 后端，集成 LangGraph Agent、三级 RAG 检索、语义缓存。
+AI 智能导购电商平台，Next.js 16 前端 + FastAPI 后端，集成 LangGraph Agent、三级 RAG 检索、语义缓存。
 
 ## 常用命令
 
@@ -17,8 +17,11 @@ uvicorn main:app --reload
 # 安装依赖
 pip install -r requirements.txt
 
-# 导入种子数据（35 个演示商品）
+# 导入种子数据（35 个演示商品，首次运行或重置数据时使用）
 python -m scripts.seed_data
+
+# 运行集成测试（107 个用例，需要后端服务运行中）
+python -m scripts.run_tests
 
 # RAG 评估脚本
 python -m scripts.run_evaluation
@@ -42,7 +45,8 @@ npm run build
 npm run lint
 ```
 
-**访问地址：**
+### 访问地址
+
 - 前端：http://localhost:3000（开发）/ http://localhost:8000（生产）
 - 后端 API：http://localhost:8000
 - API 文档：http://localhost:8000/docs
@@ -51,8 +55,8 @@ npm run lint
 
 项目使用 `.env` 文件（本地开发）或环境变量配置。关键变量见 `config.py`：
 
-- `MYSQL_*` / `DATABASE_URL` — MySQL 连接
-- `REDIS_*` — Redis 连接
+- `MYSQL_*` / `DATABASE_URL` — MySQL 连接（默认 `root:123456@localhost:3306/agentcommerce`）
+- `REDIS_*` — Redis 连接（默认 `localhost:6379`）
 - `SECRET_KEY` — JWT 签名密钥
 - `OPENAI_API_KEY` — LLM 调用
 - `DASHSCOPE_API_KEY` — 通义千问 Embedding（默认 provider）
@@ -73,6 +77,7 @@ agent/             LangGraph ReAct Agent
 rag/               三级混合检索（BM25 + FAISS + Reranker）
 monitoring/        限流 + 熔断 + 日志
 cache/             语义缓存
+scripts/           种子数据 + 测试 + RAG 评估
 ```
 
 ### 前端架构
@@ -107,7 +112,7 @@ cache/             语义缓存
 ### 请求流程
 
 1. 浏览器访问 `localhost:3000`（Next.js 开发服务器）
-2. 前端通过 `frontend/lib/api.ts` 调用 `localhost:8000/api/*` 接口
+2. 前端通过 `frontend/lib/api.ts` 调用 `localhost:8000/api/*` 接口（开发环境由 `next.config.ts` 的 rewrites 代理）
 3. `main.py` 中间件记录请求耗时
 4. Router → Service → Model（SQLAlchemy）→ MySQL
 5. Agent 请求：Router → `agent/graph.py`（LangGraph ReAct 循环）→ 工具调用 → 返回
@@ -137,8 +142,32 @@ cache/             语义缓存
 
 ### TypeScript（前端）
 
+- **Next.js 16 有破坏性变更**，写前端代码前先读 `frontend/node_modules/next/dist/docs/` 中的指南
 - 组件用函数式 + Hooks，不用 class
 - shadcn/ui 组件放在 `components/ui/`，不要修改，直接用 `npx shadcn@latest add <component>` 添加
 - 业务状态用 Zustand（`store/`），服务端数据用 TanStack Query（`lib/query-client.ts`）
 - API 调用统一走 `lib/api.ts`，不要在组件里直接 fetch
 - 样式用 Tailwind CSS，不要写自定义 CSS（`globals.css` 除外）
+
+## Docker 部署（推荐）
+
+```bash
+docker-compose up -d --build       # 构建并启动（App + MySQL + Redis）
+docker-compose exec app python -m scripts.seed_data  # 导入种子数据
+docker-compose logs -f app         # 查看日志
+docker-compose down                # 停止
+docker-compose down -v             # 停止并删除数据卷（MySQL 数据会丢失）
+```
+
+- 前端页面：http://localhost:8000
+- API 文档：http://localhost:8000/docs
+
+Docker 架构：Nginx（:80）→ `/` 转发 Next.js standalone server（:3000），`/api/` 转发 Uvicorn（:8000）。Supervisor 管理三个进程。
+
+## 前置依赖（手动部署）
+
+本地开发需要运行：
+- **MySQL 8.0+** — 创建数据库 `agentcommerce`（UTF-8）
+- **Redis 6.0+** — 默认 `localhost:6379`
+
+首次启动后访问 `http://localhost:8000/docs` 验证后端正常，运行 `python -m scripts.seed_data` 导入演示数据。
