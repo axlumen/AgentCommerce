@@ -2,6 +2,8 @@
 商品服务：CRUD、分页、搜索
 """
 
+from datetime import datetime
+
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
@@ -75,7 +77,7 @@ def get_product(db: Session, product_id: int) -> Product | None:
 
 def create_product(db: Session, data: ProductCreate) -> Product:
     """创建商品"""
-    product = Product(**data.model_dump())
+    product = Product(**data.model_dump(), created_at=datetime.now())
     db.add(product)
     db.commit()
     db.refresh(product)

@@ -10,6 +10,7 @@
 import logging
 import time
 
+import config
 from redis_client import get_redis
 
 logger = logging.getLogger(__name__)
@@ -34,6 +35,20 @@ class CircuitBreaker:
     - cb:{name}:half_open_calls → HALF_OPEN 状态下的试探调用次数
     """
 
+    # Lua 脚本：原子检查 OPEN → HALF_OPEN 状态转换
+    _CHECK_STATE_SCRIPT = """
+    local state = redis.call('GET', KEYS[1]) or 'CLOSED'
+    if state == 'OPEN' then
+        local last_fail = tonumber(redis.call('GET', KEYS[2])) or 0
+        if tonumber(ARGV[1]) - last_fail >= tonumber(ARGV[2]) then
+            redis.call('SET', KEYS[1], 'HALF_OPEN')
+            redis.call('SET', KEYS[3], '0')
+            return 'HALF_OPEN'
+        end
+    end
+    return state
+    """
+
     def __init__(
         self,
         name: str = "ai_service",
@@ -46,6 +61,7 @@ class CircuitBreaker:
         self.recovery_timeout = recovery_timeout
         self.half_open_max_calls = half_open_max_calls
         self._prefix = f"cb:{name}:"
+        self._check_state_sha = None  # Lua 脚本 SHA 缓存
 
     def _get(self, field: str, default: str = "") -> str:
         """获取 Redis 字段"""
@@ -83,19 +99,35 @@ class CircuitBreaker:
             return 0
 
     def state(self) -> str:
-        """获取当前状态"""
-        state = self._get("state", CLOSED)
+        """获取当前状态（原子操作）"""
+        r = get_redis()
+        if not r:
+            return CLOSED
 
-        # OPEN 状态下检查是否超时 → 转为 HALF_OPEN
-        if state == OPEN:
-            last_fail = float(self._get("last_fail", "0"))
-            if time.time() - last_fail >= self.recovery_timeout:
-                self._set("state", HALF_OPEN)
-                self._set("half_open_calls", "0")
+        try:
+            # 使用 Lua 脚本保证原子性：检查超时并转换状态
+            state = r.evalsha(
+                self._get_check_state_script(r),
+                3,  # KEYS 数量
+                f"{self._prefix}state",
+                f"{self._prefix}last_fail",
+                f"{self._prefix}half_open_calls",
+                str(time.time()),
+                str(self.recovery_timeout),
+            )
+            result = state.decode() if isinstance(state, bytes) else state
+            if result == HALF_OPEN:
                 logger.info(f"Circuit breaker [{self.name}] OPEN → HALF_OPEN")
-                return HALF_OPEN
+            return result
+        except Exception as e:
+            logger.debug(f"Circuit breaker state check failed: {e}")
+            return self._get("state", CLOSED)
 
-        return state
+    def _get_check_state_script(self, redis_client):
+        """获取 Lua 脚本 SHA（懒加载）"""
+        if self._check_state_sha is None:
+            self._check_state_sha = redis_client.script_load(self._CHECK_STATE_SCRIPT)
+        return self._check_state_sha
 
     def call(self, fn, *args, **kwargs):
         """
@@ -239,7 +271,7 @@ class CircuitOpenError(Exception):
 # 全局单例
 ai_circuit_breaker = CircuitBreaker(
     name="ai_service",
-    failure_threshold=5,
-    recovery_timeout=60,
+    failure_threshold=config.CIRCUIT_BREAKER_THRESHOLD,
+    recovery_timeout=config.CIRCUIT_BREAKER_RECOVERY_TIMEOUT,
     half_open_max_calls=3,
 )

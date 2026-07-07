@@ -48,12 +48,16 @@ interface ButtonProps
 }
 
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant, size, asChild = false, ...props }, ref) => {
+  ({ className, variant, size, asChild = false, children, ...props }, ref) => {
     if (asChild) {
+      const child = React.Children.only(children) as React.ReactElement
       return (
-        <span
+        <ButtonPrimitive
+          ref={ref}
+          data-slot="button"
           className={cn(buttonVariants({ variant, size, className }))}
-          {...(props as React.HTMLAttributes<HTMLSpanElement>)}
+          render={child}
+          {...props}
         />
       )
     }
@@ -64,7 +68,9 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         data-slot="button"
         className={cn(buttonVariants({ variant, size, className }))}
         {...props}
-      />
+      >
+        {children}
+      </ButtonPrimitive>
     )
   }
 )

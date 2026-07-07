@@ -25,7 +25,7 @@ export default function CartPage() {
     if (isAuthenticated) {
       fetchCart();
     }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, fetchCart]);
 
   if (authLoading || !isAuthenticated) {
     return null;

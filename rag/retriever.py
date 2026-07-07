@@ -12,6 +12,7 @@
 """
 
 import logging
+import threading
 import time
 from dataclasses import dataclass, field
 
@@ -57,6 +58,7 @@ class HybridRetriever:
         # 各层可用性
         self._bm25_available = False
         self._vector_available = False
+        self._vector_fail_count = 0  # 向量检索连续失败计数
         self._reranker_available = False
 
     def build_index(self, products: list[dict]) -> None:
@@ -165,9 +167,14 @@ class HybridRetriever:
             bm25 = get_bm25_index()
             results = bm25.search(query, top_k=self.top_k_bm25)
 
-            # 元数据过滤
+            # 元数据过滤（复用调用方的 DB session）
             if filters and results:
-                results = self._apply_product_filters(results, filters)
+                from database import SessionLocal
+                db = SessionLocal()
+                try:
+                    results = self._apply_product_filters(results, filters, db)
+                finally:
+                    db.close()
 
             return dict(results)
         except Exception as e:
@@ -182,11 +189,23 @@ class HybridRetriever:
         try:
             vs = get_vector_store()
             results = vs.search(query, top_k=self.top_k_vector, filters=filters)
+            self._vector_fail_count = 0  # 成功则重置计数
             return {pid: score for pid, score, _ in results}
         except Exception as e:
             logger.error(f"Vector search failed: {e}")
-            self._vector_available = False
+            self._vector_fail_count += 1
+            # 连续失败 3 次后才标记为不可用，60 秒后自动恢复
+            if self._vector_fail_count >= 3:
+                self._vector_available = False
+                logger.warning("Vector search disabled after 3 consecutive failures, will retry in 60s")
+                threading.Timer(60.0, self._reset_vector_available).start()
             return {}
+
+    def _reset_vector_available(self):
+        """重置向量检索可用性（定时恢复）"""
+        self._vector_available = True
+        self._vector_fail_count = 0
+        logger.info("Vector search re-enabled after recovery timeout")
 
     def _merge_results(
         self,
@@ -292,41 +311,37 @@ class HybridRetriever:
 
         return {k: (v - min_val) / range_val for k, v in scores.items()}
 
-    @staticmethod
     def _apply_product_filters(
+        self,
         results: list[tuple[int, float]],
         filters: dict,
+        db=None,
     ) -> list[tuple[int, float]]:
-        """对 BM25 结果应用商品级过滤"""
-        from database import SessionLocal
+        """对 BM25 结果应用商品级过滤（复用调用方的 DB session）"""
         from models.product import Product
 
-        db = SessionLocal()
-        try:
-            product_ids = [pid for pid, _ in results]
-            products = db.query(Product).filter(Product.id.in_(product_ids)).all()
-            product_map = {p.id: p for p in products}
+        product_ids = [pid for pid, _ in results]
+        products = db.query(Product).filter(Product.id.in_(product_ids)).all()
+        product_map = {p.id: p for p in products}
 
-            filtered = []
-            for pid, score in results:
-                product = product_map.get(pid)
-                if not product:
+        filtered = []
+        for pid, score in results:
+            product = product_map.get(pid)
+            if not product:
+                continue
+
+            if "category_id" in filters and product.category_id != filters["category_id"]:
+                continue
+            if "price_min" in filters and float(product.price) < filters["price_min"]:
+                continue
+            if "price_max" in filters and float(product.price) > filters["price_max"]:
+                continue
+            if "brand" in filters:
+                if not product.brand or product.brand.lower() != filters["brand"].lower():
                     continue
 
-                if "category_id" in filters and product.category_id != filters["category_id"]:
-                    continue
-                if "price_min" in filters and float(product.price) < filters["price_min"]:
-                    continue
-                if "price_max" in filters and float(product.price) > filters["price_max"]:
-                    continue
-                if "brand" in filters:
-                    if not product.brand or product.brand.lower() != filters["brand"].lower():
-                        continue
-
-                filtered.append((pid, score))
-            return filtered
-        finally:
-            db.close()
+            filtered.append((pid, score))
+        return filtered
 
     def get_status(self) -> dict:
         """获取检索器状态"""

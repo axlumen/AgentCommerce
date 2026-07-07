@@ -19,7 +19,7 @@ export function useAuth() {
     if (store.token && !store.user) {
       store.fetchUser();
     }
-  }, []);
+  }, [store.token, store.user, store.fetchUser]);
 
   return store;
 }

@@ -10,13 +10,15 @@ API 文档：
 
 from contextlib import asynccontextmanager
 
+import asyncio
 import logging
-import os
 import time
+import uuid
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
+import config
 from database import create_tables
 from routers import auth, products, cart, orders, admin, ai, agent
 
@@ -27,12 +29,20 @@ async def lifespan(app: FastAPI):
     create_tables()
 
     # 异步构建 RAG 索引（不阻塞启动）
-    try:
-        _build_rag_indexes()
-    except Exception as e:
-        logging.getLogger(__name__).warning(f"RAG index build skipped: {e}")
+    asyncio.create_task(_build_rag_indexes_async())
 
     yield
+
+
+async def _build_rag_indexes_async():
+    """异步构建 RAG 检索索引（不阻塞事件循环）"""
+    logger = logging.getLogger(__name__)
+    try:
+        # 在线程池中运行同步的索引构建
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, _build_rag_indexes)
+    except Exception as e:
+        logger.warning(f"RAG index build skipped: {e}")
 
 
 def _build_rag_indexes():
@@ -81,7 +91,7 @@ app = FastAPI(
 # CORS 中间件（允许前端跨域请求）
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=config.CORS_ORIGINS.split(","),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -90,15 +100,22 @@ app.add_middleware(
 # 请求日志中间件
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
-    """记录请求耗时和状态码"""
+    """记录请求耗时、状态码和链路追踪 ID"""
+    # 生成或复用请求 ID
+    request_id = request.headers.get("X-Request-ID", str(uuid.uuid4()))
+
     start = time.time()
     response = await call_next(request)
     elapsed_ms = (time.time() - start) * 1000
 
+    # 注入请求 ID 到响应头
+    response.headers["X-Request-ID"] = request_id
+
     # 只记录 API 请求（跳过静态文件）
     if request.url.path.startswith("/api"):
         logging.getLogger("request").info(
-            f"{request.method} {request.url.path} → {response.status_code} ({elapsed_ms:.0f}ms)"
+            f"{request.method} {request.url.path} → {response.status_code} ({elapsed_ms:.0f}ms)",
+            extra={"request_id": request_id},
         )
         response.headers["X-Response-Time"] = f"{elapsed_ms:.0f}ms"
 

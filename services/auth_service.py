@@ -78,6 +78,7 @@ def register_user(db: Session, username: str, email: str, password: str, phone: 
         email=email,
         hashed_password=hash_password(password),
         phone=phone,
+        created_at=datetime.now(),
     )
     db.add(user)
     db.commit()

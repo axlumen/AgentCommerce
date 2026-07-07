@@ -42,7 +42,7 @@ class OrderResponse(BaseModel):
     completed_at: datetime | None
     cancelled_at: datetime | None
     remark: str | None
-    created_at: datetime
+    created_at: datetime | None = None
     items: list[OrderItemResponse] = []
 
     model_config = {"from_attributes": True}

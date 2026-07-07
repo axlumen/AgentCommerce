@@ -2,8 +2,10 @@
 订单服务：创建订单、状态管理、库存扣减
 """
 
+import logging
 import random
 import time
+import uuid
 from datetime import datetime
 
 from sqlalchemy.orm import Session
@@ -13,12 +15,12 @@ from models.product import Product
 from services.cart_service import clear_cart, get_selected_items, remove_from_cart
 from services.exceptions import NotFoundError, ConflictError
 
+logger = logging.getLogger(__name__)
+
 
 def generate_order_no() -> str:
-    """生成订单号：时间戳 + 随机数"""
-    timestamp = int(time.time() * 1000)
-    random_part = random.randint(1000, 9999)
-    return f"{timestamp}{random_part}"
+    """生成订单号：ORD + 12位UUID（避免高并发碰撞）"""
+    return f"ORD{uuid.uuid4().hex[:12].upper()}"
 
 
 def create_order(db: Session, user_id: int, address: dict, cart_item_ids: list[int], remark: str | None = None) -> Order:
@@ -83,6 +85,7 @@ def create_order(db: Session, user_id: int, address: dict, cart_item_ids: list[i
         address_snapshot=address,
         total_amount=total_amount,
         remark=remark,
+        created_at=datetime.now(),
     )
     db.add(order)
     db.flush()  # 获取 order.id
@@ -96,8 +99,12 @@ def create_order(db: Session, user_id: int, address: dict, cart_item_ids: list[i
     db.commit()
     db.refresh(order)
 
-    for item in cart_items:
-        remove_from_cart(user_id, item["product_id"])
+    # 清除购物车（失败不影响订单创建，记录日志供人工处理）
+    try:
+        for item in cart_items:
+            remove_from_cart(user_id, item["product_id"])
+    except Exception as e:
+        logger.warning(f"购物车清理失败，订单 {order.id} 已创建: {e}")
 
     return order
 

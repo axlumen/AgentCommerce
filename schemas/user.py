@@ -29,7 +29,7 @@ class UserResponse(BaseModel):
     phone: str | None
     is_active: bool
     is_admin: bool
-    created_at: datetime
+    created_at: datetime | None = None
 
     model_config = {"from_attributes": True}
 

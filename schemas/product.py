@@ -67,6 +67,6 @@ class ProductResponse(BaseModel):
     specs: dict | None
     is_on_sale: bool
     sales_count: int
-    created_at: datetime
+    created_at: datetime | None = None
 
     model_config = {"from_attributes": True}

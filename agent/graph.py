@@ -36,7 +36,7 @@ from agent.security import (
 )
 from agent.state import AgentState
 from agent.tools import TOOLS_BY_NAME
-from config import AGENT_MAX_ITERATIONS, AGENT_MODEL
+from config import AGENT_MAX_ITERATIONS, AGENT_MAX_TOOL_WORKERS, AGENT_MODEL
 
 logger = logging.getLogger(__name__)
 
@@ -115,13 +115,14 @@ def agent_node(state: AgentState) -> dict:
 
     except Exception as e:
         elapsed_ms = (time.time() - start_time) * 1000
-        logger.exception("LLM call failed")
+        logger.exception("LLM call failed", extra={"session_id": state.get("session_id")})
         log_ai_call(AICallLog(model=AGENT_MODEL, latency_ms=elapsed_ms, success=False, error=str(e), call_type="llm"))
         log_agent_trace(AgentTrace(
             session_id=state.get("session_id", ""), step=step, node="agent_node",
             latency_ms=elapsed_ms, success=False, error=str(e),
         ))
-        error_msg = AIMessage(content=f"抱歉，AI 服务暂时不可用（{str(e)}）。请稍后再试。")
+        # 用户侧只返回通用提示，详细异常已在日志中
+        error_msg = AIMessage(content="抱歉，AI 服务暂时不可用，请稍后再试。")
         return {"messages": [error_msg]}
 
 
@@ -253,7 +254,7 @@ def tool_node(state: AgentState) -> dict:
     # 并行执行：为每个线程复制独立的 contextvars 副本
     results_by_id = {}
 
-    with ThreadPoolExecutor(max_workers=min(len(tool_calls), 4)) as executor:
+    with ThreadPoolExecutor(max_workers=min(len(tool_calls), AGENT_MAX_TOOL_WORKERS)) as executor:
         futures = {
             executor.submit(contextvars.copy_context().run, _run_single_tool, tc): tc
             for tc in tool_calls
