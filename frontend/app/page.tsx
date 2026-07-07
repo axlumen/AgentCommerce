@@ -6,8 +6,9 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ProductCard } from '@/components/product/ProductCard';
+import { HeroActions } from '@/components/HeroActions';
 import { api, type ProductParams } from '@/lib/api';
-import { ArrowRight, Sparkles } from 'lucide-react';
+import { Sparkles, ArrowRight } from 'lucide-react';
 
 // ISR: 每 60 秒重新生成
 export const revalidate = 60;
@@ -46,15 +47,7 @@ export default async function HomePage() {
               基于 AI 的智能导购电商平台，支持语义搜索、智能推荐、多轮对话
             </p>
             <div className="flex gap-4">
-              <Button asChild>
-                <Link href="/products">
-                  浏览商品
-                  <ArrowRight className="ml-2 h-4 w-4" />
-                </Link>
-              </Button>
-              <Button variant="outline" asChild>
-                <Link href="/login">立即登录</Link>
-              </Button>
+              <HeroActions />
             </div>
           </div>
         </div>

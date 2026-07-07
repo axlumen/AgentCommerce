@@ -15,6 +15,13 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from '@/components/ui/sheet';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { useAuth } from '@/hooks/useAuth';
@@ -134,9 +141,41 @@ export function Header() {
           )}
 
           {/* 移动端菜单 */}
-          <Button variant="ghost" size="icon" className="md:hidden">
-            <Menu className="h-5 w-5" />
-          </Button>
+          <Sheet>
+            <SheetTrigger render={<Button variant="ghost" size="icon" className="md:hidden" />}>
+              <Menu className="h-5 w-5" />
+            </SheetTrigger>
+            <SheetContent side="right" showCloseButton>
+              <SheetHeader>
+                <SheetTitle>导航</SheetTitle>
+              </SheetHeader>
+              <nav className="flex flex-col gap-1 px-4">
+                <Link
+                  href="/products"
+                  className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium hover:bg-accent"
+                >
+                  商品
+                </Link>
+                <Link
+                  href="/orders"
+                  className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium hover:bg-accent"
+                >
+                  订单
+                </Link>
+                <Link
+                  href="/cart"
+                  className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium hover:bg-accent"
+                >
+                  购物车
+                  {totalItems > 0 && (
+                    <Badge variant="destructive" className="ml-auto">
+                      {totalItems}
+                    </Badge>
+                  )}
+                </Link>
+              </nav>
+            </SheetContent>
+          </Sheet>
         </div>
       </div>
     </header>

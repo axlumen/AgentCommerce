@@ -4,7 +4,11 @@
  * 统一处理请求、认证、错误。
  */
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+// 客户端用相对路径（由 nginx/next.config.ts 代理），服务端用内部地址直连后端
+const API_BASE =
+  typeof window !== 'undefined'
+    ? (process.env.NEXT_PUBLIC_API_URL || '')
+    : (process.env.API_INTERNAL_URL || 'http://localhost:8000');
 
 interface ApiResponse<T> {
   data: T;
@@ -149,13 +153,13 @@ export interface Order {
 }
 
 export interface CreateOrderData {
-  items: Array<{
-    product_id: number;
-    quantity: number;
-  }>;
-  address: string;
-  phone: string;
-  receiver_name: string;
+  cart_item_ids: number[];
+  address: {
+    name: string;
+    phone: string;
+    address: string;
+  };
+  remark?: string;
 }
 
 export interface ChatRequest {
@@ -181,6 +185,19 @@ export interface ConfirmRequest {
   session_id: string;
   approved: boolean;
   thread_id?: string;
+}
+
+export interface StreamCallbacks {
+  onToken?: (content: string) => void;
+  onToolStart?: (name: string, args: Record<string, unknown>) => void;
+  onToolEnd?: (name: string, result: unknown) => void;
+  onDone?: (data: ChatResponse) => void;
+  onNeedsConfirm?: (data: {
+    confirm_action: string;
+    confirm_args: Record<string, unknown>;
+    confirm_message: string;
+  }) => void;
+  onError?: (message: string) => void;
 }
 
 // ============================================================
@@ -223,7 +240,8 @@ export const api = {
 
   // 购物车
   cart: {
-    list: () => fetchApi<CartItem[]>('/api/cart'),
+    list: () => fetchApi<{ items: CartItem[]; total_amount: number; selected_count: number }>('/api/cart')
+      .then((res) => res.items ?? []),
     add: (data: AddCartData) =>
       fetchApi<CartItem>('/api/cart', {
         method: 'POST',
@@ -241,7 +259,8 @@ export const api = {
 
   // 订单
   orders: {
-    list: () => fetchApi<Order[]>('/api/orders'),
+    list: () => fetchApi<{ items: Order[]; total: number; page: number; size: number }>('/api/orders')
+      .then((res) => res.items ?? []),
     create: (data: CreateOrderData) =>
       fetchApi<Order>('/api/orders', {
         method: 'POST',
@@ -263,6 +282,93 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(data),
       }),
+    chatStream: async (
+      data: ChatRequest,
+      callbacks: StreamCallbacks
+    ): Promise<void> => {
+      const token =
+        typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        Accept: 'text/event-stream',
+      };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      const response = await fetch(`${API_BASE}/api/agent/chat/stream`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(data),
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        throw new ApiError(
+          response.status,
+          error.detail || `API Error: ${response.status}`
+        );
+      }
+
+      const reader = response.body?.getReader();
+      if (!reader) {
+        throw new Error('ReadableStream not supported');
+      }
+
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let currentEvent = '';
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+
+          for (const line of lines) {
+            if (line.startsWith('event:')) {
+              currentEvent = line.slice(6).trim();
+            } else if (line.startsWith('data:')) {
+              const jsonStr = line.slice(5).trim();
+              if (!jsonStr) continue;
+
+              try {
+                const payload = JSON.parse(jsonStr);
+
+                switch (currentEvent) {
+                  case 'token':
+                    callbacks.onToken?.(payload.content);
+                    break;
+                  case 'tool_start':
+                    callbacks.onToolStart?.(payload.name, payload.args);
+                    break;
+                  case 'tool_end':
+                    callbacks.onToolEnd?.(payload.name, payload.result);
+                    break;
+                  case 'done':
+                    callbacks.onDone?.(payload as ChatResponse);
+                    break;
+                  case 'needs_confirm':
+                    callbacks.onNeedsConfirm?.(payload);
+                    break;
+                  case 'error':
+                    callbacks.onError?.(payload.message);
+                    break;
+                }
+              } catch {
+                // skip malformed JSON
+              }
+            }
+          }
+        }
+      } finally {
+        reader.releaseLock();
+      }
+    },
     confirm: (data: ConfirmRequest) =>
       fetchApi<ChatResponse>('/api/agent/confirm', {
         method: 'POST',

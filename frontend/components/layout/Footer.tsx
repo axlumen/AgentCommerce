@@ -23,6 +23,8 @@ export function Footer() {
           </a>
           <a
             href="/docs"
+            target="_blank"
+            rel="noopener noreferrer"
             className="text-sm text-muted-foreground hover:text-primary"
           >
             API 文档

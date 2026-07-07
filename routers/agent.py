@@ -3,21 +3,24 @@ Agent API 路由
 
 提供智能导购 Agent 的 HTTP 接口：
 - POST /api/agent/chat          — Agent 对话（主入口）
+- POST /api/agent/chat/stream   — Agent 对话（SSE 流式输出）
 - POST /api/agent/confirm       — 确认敏感操作
 - GET  /api/agent/history/{session_id}  — 获取对话历史
 - DELETE /api/agent/history/{session_id} — 清除对话历史
 - GET  /api/agent/preferences   — 获取用户偏好
 """
 
+import asyncio
 import json
 import logging
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
+from sse_starlette.sse import EventSourceResponse
 from langgraph.types import Command
 
 from agent.graph import get_agent_graph
@@ -145,6 +148,154 @@ async def agent_chat(
     except Exception as e:
         logger.exception("Agent execution failed")
         raise HTTPException(status_code=500, detail=f"Agent 执行失败: {str(e)}")
+
+
+@router.post("/chat/stream")
+async def agent_chat_stream(
+    request: ChatRequest,
+    http_request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Agent 对话流式端点（SSE）
+
+    使用 LangGraph astream_events 实现 token 级流式输出。
+    事件类型：token / tool_start / tool_end / done / needs_confirm / error
+    """
+    _check_rate_limit(current_user.id)
+
+    if detect_injection(request.message):
+        raise HTTPException(status_code=400, detail="输入包含不安全内容")
+
+    message = sanitize_input(request.message)
+    session_id = request.session_id or str(uuid.uuid4())
+    thread_id = f"user_{current_user.id}_{session_id}"
+
+    user_prefs = memory_manager.get_user_preferences(current_user.id)
+    config = {"configurable": {"thread_id": thread_id}}
+
+    initial_state = {
+        "messages": [HumanMessage(content=message)],
+        "user_id": current_user.id,
+        "session_id": session_id,
+        "tool_call_history": [],
+        "confirmed_actions": set(),
+        "user_preferences": user_prefs,
+        "context_window_size": 20,
+        "pending_confirmation": None,
+    }
+
+    async def event_generator():
+        agent_graph = get_agent_graph()
+        clear_tool_call_log()
+        db_token = set_request_context(db, current_user.id)
+
+        try:
+            accumulated_reply = ""
+
+            async for event in agent_graph.astream_events(
+                initial_state, config=config, version="v2"
+            ):
+                # 检查客户端是否断开
+                if await http_request.is_disconnected():
+                    break
+
+                kind = event.get("event", "")
+
+                # LLM 逐 token 输出
+                if kind == "on_chat_model_stream":
+                    chunk = event.get("data", {}).get("chunk")
+                    if chunk and hasattr(chunk, "content") and chunk.content:
+                        accumulated_reply += chunk.content
+                        yield {
+                            "event": "token",
+                            "data": json.dumps(
+                                {"content": chunk.content}, ensure_ascii=False
+                            ),
+                        }
+
+                # 工具开始执行
+                elif kind == "on_tool_start":
+                    tool_name = event.get("name", "")
+                    tool_input = event.get("data", {}).get("input", {})
+                    yield {
+                        "event": "tool_start",
+                        "data": json.dumps(
+                            {"name": tool_name, "args": tool_input},
+                            ensure_ascii=False,
+                        ),
+                    }
+
+                # 工具执行完成
+                elif kind == "on_tool_end":
+                    tool_name = event.get("name", "")
+                    tool_output = event.get("data", {}).get("output", "")
+                    # 截断过长的工具输出
+                    if isinstance(tool_output, str) and len(tool_output) > 500:
+                        tool_output = tool_output[:500] + "..."
+                    yield {
+                        "event": "tool_end",
+                        "data": json.dumps(
+                            {"name": tool_name, "result": tool_output},
+                            ensure_ascii=False,
+                        ),
+                    }
+
+            # 流式结束，使用 checkpointer 获取最终状态
+            reset_request_context(db_token)
+
+            # 从 checkpointer 读取最终状态（astream_events 已经完整执行了图）
+            snapshot = agent_graph.get_state(config)
+            result_messages = snapshot.values.get("messages", []) if snapshot else []
+            result = {"messages": result_messages}
+
+            confirm_info = _check_interrupts(agent_graph, config)
+
+            if confirm_info:
+                yield {
+                    "event": "needs_confirm",
+                    "data": json.dumps(confirm_info, ensure_ascii=False),
+                }
+            else:
+                reply = _extract_reply(result)
+                tool_calls = _extract_tool_calls(result)
+                msg_dicts = _save_session_memory(result, session_id)
+
+                try:
+                    new_prefs = memory_manager.extract_preferences_from_messages(
+                        msg_dicts
+                    )
+                    if new_prefs:
+                        memory_manager.update_user_preferences(
+                            current_user.id, new_prefs
+                        )
+                except Exception:
+                    logger.debug("Failed to update user preferences")
+
+                yield {
+                    "event": "done",
+                    "data": json.dumps(
+                        {
+                            "reply": reply,
+                            "session_id": session_id,
+                            "tool_calls": tool_calls,
+                        },
+                        ensure_ascii=False,
+                    ),
+                }
+
+        except Exception as e:
+            reset_request_context(db_token)
+            logger.exception("Agent streaming failed")
+            yield {
+                "event": "error",
+                "data": json.dumps(
+                    {"message": f"Agent 执行失败: {str(e)}"}, ensure_ascii=False
+                ),
+            }
+
+    return EventSourceResponse(event_generator())
 
 
 @router.post("/confirm", response_model=ChatResponse)

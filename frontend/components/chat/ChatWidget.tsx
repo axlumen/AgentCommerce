@@ -22,6 +22,7 @@ interface Message {
   content: string;
   toolCalls?: ChatResponse['tool_calls'];
   timestamp: Date;
+  toolStatus?: string;
 }
 
 export function ChatWidget() {
@@ -30,6 +31,7 @@ export function ChatWidget() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isStreaming, setIsStreaming] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -57,41 +59,114 @@ export function ChatWidget() {
     setInput('');
     setIsLoading(true);
 
+    // 预创建 assistant 消息用于流式更新
+    const assistantId = (Date.now() + 1).toString();
+    const assistantMessage: Message = {
+      id: assistantId,
+      role: 'assistant',
+      content: '',
+      timestamp: new Date(),
+    };
+    setMessages((prev) => [...prev, assistantMessage]);
+
     try {
-      const response = await api.agent.chat({
-        message: userMessage.content,
-        session_id: sessionId || undefined,
-      });
+      await api.agent.chatStream(
+        {
+          message: userMessage.content,
+          session_id: sessionId || undefined,
+        },
+        {
+          onToken: (content) => {
+            setIsLoading(false);
+            setIsStreaming(true);
+            setMessages((prev) =>
+              prev.map((msg) =>
+                msg.id === assistantId
+                  ? { ...msg, content: msg.content + content }
+                  : msg
+              )
+            );
+          },
+          onToolStart: (name) => {
+            const toolLabel = {
+              search_products: '正在搜索商品...',
+              get_product_detail: '正在查询商品详情...',
+              check_stock: '正在检查库存...',
+              calculate_final_price: '正在计算价格...',
+              add_to_cart: '正在添加到购物车...',
+              get_user_preferences: '正在读取偏好...',
+              compare_products: '正在对比商品...',
+            }[name] || `正在调用 ${name}...`;
 
-      // 更新 session ID
-      if (!sessionId) {
-        setSessionId(response.session_id);
-      }
-
-      const assistantMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: response.reply,
-        toolCalls: response.tool_calls,
-        timestamp: new Date(),
-      };
-
-      setMessages((prev) => [...prev, assistantMessage]);
-
-      // 如果需要确认
-      if (response.needs_confirm) {
-        const confirmMessage: Message = {
-          id: (Date.now() + 2).toString(),
-          role: 'assistant',
-          content: response.confirm_message || '需要您的确认',
-          timestamp: new Date(),
-        };
-        setMessages((prev) => [...prev, confirmMessage]);
-      }
+            setMessages((prev) =>
+              prev.map((msg) =>
+                msg.id === assistantId
+                  ? { ...msg, toolStatus: toolLabel }
+                  : msg
+              )
+            );
+          },
+          onToolEnd: () => {
+            setMessages((prev) =>
+              prev.map((msg) =>
+                msg.id === assistantId
+                  ? { ...msg, toolStatus: undefined }
+                  : msg
+              )
+            );
+          },
+          onDone: (data) => {
+            if (!sessionId) {
+              setSessionId(data.session_id);
+            }
+            setMessages((prev) =>
+              prev.map((msg) =>
+                msg.id === assistantId
+                  ? {
+                      ...msg,
+                      content: data.reply || msg.content,
+                      toolCalls: data.tool_calls,
+                      toolStatus: undefined,
+                    }
+                  : msg
+              )
+            );
+          },
+          onNeedsConfirm: (data) => {
+            setMessages((prev) => {
+              const withoutEmpty = prev.filter(
+                (msg) => msg.id !== assistantId || msg.content
+              );
+              return [
+                ...withoutEmpty,
+                {
+                  id: (Date.now() + 2).toString(),
+                  role: 'assistant' as const,
+                  content: data.confirm_message || '需要您的确认',
+                  timestamp: new Date(),
+                },
+              ];
+            });
+          },
+          onError: (message) => {
+            toast.error(message);
+            // 移除空的 assistant 消息
+            setMessages((prev) =>
+              prev.filter(
+                (msg) => msg.id !== assistantId || msg.content
+              )
+            );
+          },
+        }
+      );
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '发送失败');
+      setMessages((prev) =>
+        prev.filter((msg) => msg.id !== assistantId || msg.content)
+      );
     } finally {
       setIsLoading(false);
+      setIsStreaming(false);
     }
   };
 
@@ -207,6 +282,19 @@ export function ChatWidget() {
                     )}
                   >
                     {msg.content}
+                    {/* 流式光标 */}
+                    {isStreaming &&
+                      msg.role === 'assistant' &&
+                      msg.id === messages[messages.length - 1]?.id && (
+                        <span className="inline-block w-0.5 h-4 bg-foreground animate-pulse ml-0.5 align-text-bottom" />
+                      )}
+                    {/* 工具状态提示 */}
+                    {msg.toolStatus && (
+                      <div className="flex items-center gap-1.5 mt-1.5 text-xs text-muted-foreground">
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                        {msg.toolStatus}
+                      </div>
+                    )}
                   </div>
                   {msg.role === 'user' && (
                     <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center flex-shrink-0">

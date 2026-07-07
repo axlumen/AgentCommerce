@@ -56,6 +56,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
           ref={ref}
           data-slot="button"
           className={cn(buttonVariants({ variant, size, className }))}
+          nativeButton={false}
           render={child}
           {...props}
         />

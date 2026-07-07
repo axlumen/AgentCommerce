@@ -1,6 +1,9 @@
 import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
+  // Docker 构建使用 standalone 模式
+  output: 'standalone',
+
   // API 代理（开发环境）
   async rewrites() {
     return [

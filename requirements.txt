@@ -16,3 +16,4 @@ jieba>=0.42
 faiss-cpu>=1.7
 sentence-transformers>=2.2
 python-dotenv>=1.0
+sse-starlette>=1.8,<2.0
