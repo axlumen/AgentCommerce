@@ -1,6 +1,6 @@
 # 🛒 AgentCommerce — AI 智能导购电商平台
 
-基于 **FastAPI + LangGraph + RAG + Redis + MySQL** 构建的全功能电商后端 API，集成 AI 智能导购 Agent、三级混合检索、语义缓存、全链路监控。
+基于 **Next.js + FastAPI + LangGraph + RAG + Redis + MySQL** 构建的全功能电商平台，集成 AI 智能导购 Agent、三级混合检索、语义缓存、全链路监控。
 
 ## ✨ 项目亮点
 
@@ -14,18 +14,18 @@
 | **记忆系统** | 短期滑动窗口（当前对话）+ 长期用户偏好（品类/品牌/价格区间） |
 | **安全控制** | 工具权限分级、Prompt 注入检测、敏感操作确认、参数校验 |
 | **防超卖设计** | WHERE 条件扣减库存，数据快照保护历史订单 |
-| **深色模式** | 前端支持一键切换深色/浅色主题 |
+| **现代前端** | Next.js 16 + TypeScript + Tailwind CSS + shadcn/ui，深色模式一键切换 |
 
 ## 🏗️ 技术架构
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    Frontend (Vanilla JS)                      │
+│              Frontend (Next.js + TypeScript)                 │
 │  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌────────────────┐ │
 │  │ 商品浏览  │ │ 购物车   │ │ 订单管理  │ │ AI 聊天悬浮窗  │ │
 │  └──────────┘ └──────────┘ └──────────┘ └────────────────┘ │
 └──────────────────────────┬──────────────────────────────────┘
-                           │ HTTP
+                           │ HTTP / API Routes
 ┌──────────────────────────▼──────────────────────────────────┐
 │                      FastAPI                                 │
 │  ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐ ┌──────────┐ │
@@ -42,13 +42,27 @@
 └───────┬──────────┬──────────┬──────────┬────────────────────┘
         │          │          │          │
    ┌────▼────┐ ┌───▼────┐ ┌──▼───┐ ┌───▼─────┐
-   │  MySQL  │ │ Redis  │ │OpenAI│ │   FAISS │
-   │         │ │(cache/ │ │ API  │ │(vectors)│
+   │  MySQL  │ │ Redis  │ │ LLM  │ │  FAISS  │
+   │         │ │(cache/ │ │ APIs │ │(vectors)│
    │         │ │ratelmt)│ │      │ │         │
    └─────────┘ └────────┘ └──────┘ └─────────┘
 ```
 
 ## 🛠️ 技术栈
+
+### 前端
+
+| 技术 | 用途 |
+|------|------|
+| **Next.js 16** | React 框架，App Router + Turbopack |
+| **TypeScript** | 类型安全 |
+| **Tailwind CSS 4** | 原子化 CSS |
+| **shadcn/ui** | 组件库（基于 Radix UI） |
+| **Zustand** | 状态管理（auth / cart / ui） |
+| **TanStack Query** | 服务端状态管理 + 缓存 |
+| **next-themes** | 深色模式切换 |
+
+### 后端
 
 | 技术 | 用途 |
 |------|------|
@@ -123,6 +137,7 @@
 - AI 智能导购悬浮聊天窗（浮动气泡 + 对话窗口）
 - 商品卡片（品牌标签、销量徽章、悬停动画）
 - 响应式设计（768px / 480px 断点）
+- TypeScript 全栈类型安全
 
 ## 🚀 快速开始
 
@@ -159,6 +174,7 @@ docker-compose exec app python -m scripts.seed_data
 #### 环境要求
 
 - Python 3.10+
+- Node.js 18+
 - MySQL 5.7+
 - Redis 6.0+
 
@@ -169,31 +185,23 @@ git clone https://github.com/axlumen/AgentCommerce.git
 cd AgentCommerce
 ```
 
-#### 2. 创建虚拟环境
+#### 2. 后端设置
 
 ```bash
+# 创建虚拟环境
 python -m venv venv
 # Windows
 venv\Scripts\activate
 # Linux/Mac
 source venv/bin/activate
-```
 
-#### 3. 安装依赖
-
-```bash
+# 安装依赖
 pip install -r requirements.txt
-```
 
-#### 4. 配置数据库
+# 配置数据库
+# 创建 MySQL 数据库：agentcommerce（UTF-8）
 
-```sql
-CREATE DATABASE agentcommerce CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-```
-
-通过环境变量配置（或直接编辑 `config.py`）：
-
-```bash
+# 配置环境变量（或创建 .env 文件）
 # Windows
 set MYSQL_PASSWORD=你的密码
 set SECRET_KEY=你的密钥
@@ -203,31 +211,33 @@ set OPENAI_API_KEY=sk-xxx
 export MYSQL_PASSWORD=你的密码
 export SECRET_KEY=你的密钥
 export OPENAI_API_KEY=sk-xxx
-```
 
-#### 5. 启动 Redis
-
-```bash
+# 启动 Redis
 redis-server
-```
 
-#### 6. 初始化种子数据（可选）
-
-```bash
+# 导入种子数据（可选，35 个演示商品）
 python -m scripts.seed_data
+
+# 启动后端
+uvicorn main:app --reload
 ```
 
-> 包含 35 个热销商品（手机、耳机、笔记本、手表、家电），用于演示和测试。
-
-#### 6. 启动应用
+#### 3. 前端设置
 
 ```bash
-python -m uvicorn main:app --reload
+cd frontend
+
+# 安装依赖
+npm install
+
+# 启动开发服务器
+npm run dev
 ```
 
-#### 7. 访问
+#### 4. 访问
 
-- 前端页面：http://localhost:8000
+- 前端页面：http://localhost:3000
+- 后端 API：http://localhost:8000
 - API 文档：http://localhost:8000/docs
 
 ## 📚 API 接口
@@ -306,6 +316,23 @@ AgentCommerce/
 ├── docker-compose.yml          # 一键部署（App + MySQL + Redis）
 ├── .dockerignore               # Docker 构建排除规则
 │
+├── frontend/                   # Next.js 前端（TypeScript）
+│   ├── app/                    #   App Router 页面
+│   │   ├── page.tsx            #     首页（商品列表）
+│   │   ├── login/page.tsx      #     登录/注册
+│   │   ├── products/           #     商品列表 + 详情
+│   │   ├── cart/page.tsx       #     购物车
+│   │   └── orders/page.tsx     #     订单管理
+│   ├── components/             #   组件
+│   │   ├── layout/             #     Header、Footer
+│   │   ├── product/            #     ProductCard、ProductImage
+│   │   ├── chat/               #     AI 聊天悬浮窗
+│   │   └── ui/                 #     shadcn/ui 基础组件
+│   ├── hooks/                  #   自定义 Hooks（useAuth、useCart）
+│   ├── store/                  #   Zustand 状态管理
+│   ├── lib/                    #   工具函数、API 客户端
+│   └── package.json
+│
 ├── agent/                      # AI 智能导购 Agent（7 文件，1578 行）
 │   ├── state.py                #   Agent 状态定义
 │   ├── tools.py                #   6 个业务工具（上下文变量传递 DB）
@@ -333,11 +360,6 @@ AgentCommerce/
 ├── cache/                      # 缓存模块（2 文件，343 行）
 │   └── semantic_cache.py       #   语义缓存（embedding 相似度）
 │
-├── frontend/                   # 前端（3 文件，2046 行）
-│   ├── index.html              #   单页应用 + AI 聊天悬浮窗
-│   ├── style.css               #   深色模式 + 响应式 + 聊天窗样式
-│   └── app.js                  #   API 调用 + AI 聊天 + 主题切换
-│
 ├── models/                     # SQLAlchemy 数据模型
 ├── schemas/                    # Pydantic 数据验证
 ├── routers/                    # API 路由
@@ -364,21 +386,7 @@ AgentCommerce/
 | 9 | **熔断器** | 连续 5 次失败 → OPEN，60s 后 HALF_OPEN 试探，成功 → CLOSED |
 | 10 | **并行工具执行** | ThreadPoolExecutor + contextvars.copy_context() 并行调用多个工具 |
 | 11 | **降级链** | 全量混合检索 → BM25+Vector → BM25 only → MySQL LIKE |
-
-## 📊 代码统计
-
-| 模块 | 文件数 | 行数 |
-|------|--------|------|
-| rag/ | 9 | 1785 |
-| agent/ | 7 | 1578 |
-| frontend/ | 3 | 2046 |
-| routers/ | 8 | 1178 |
-| services/ | 6 | 818 |
-| monitoring/ | 4 | 667 |
-| cache/ | 2 | 343 |
-| models/ + schemas/ | 10 | 379 |
-| 其他 | 4 | 440 |
-| **合计** | **53** | **~9200** |
+| 12 | **前后端分离** | Next.js 独立部署，通过 API 代理连接后端，支持 SSR/CSR 混合渲染 |
 
 ## 📄 License
 
