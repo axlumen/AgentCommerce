@@ -17,9 +17,9 @@ export function useAuth() {
   useEffect(() => {
     // 首次加载时获取用户信息
     if (store.token && !store.user) {
-      store.fetchUser();
+      useAuthStore.getState().fetchUser();
     }
-  }, [store.token, store.user, store.fetchUser]);
+  }, [store.token, store.user]);
 
   return store;
 }

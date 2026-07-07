@@ -15,7 +15,7 @@ import { ProductImage } from '@/components/product/ProductImage';
 import { api, type Order } from '@/lib/api';
 import { useRequireAuth } from '@/hooks/useAuth';
 import { formatPrice, formatDate, getOrderStatusText, getOrderStatusColor } from '@/lib/utils';
-import { Package, CreditCard, XCircle, CheckCircle } from 'lucide-react';
+import { Package, CreditCard, XCircle, CheckCircle, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function OrdersPage() {
@@ -56,7 +56,17 @@ export default function OrdersPage() {
     }
   };
 
-  if (authLoading || !isAuthenticated) {
+  if (authLoading) {
+    return (
+      <div className="container mx-auto max-w-7xl px-4 py-8">
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        </div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
     return null;
   }
 

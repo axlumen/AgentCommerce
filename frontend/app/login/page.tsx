@@ -137,7 +137,7 @@ export default function LoginPage() {
                     variant="outline"
                     size="sm"
                     onClick={() => {
-                      setLoginForm({ username: 'admin', password: 'admin123' });
+                      setLoginForm({ username: 'admin', password: 'Admin1234' });
                     }}
                   >
                     管理员
@@ -146,7 +146,7 @@ export default function LoginPage() {
                     variant="outline"
                     size="sm"
                     onClick={() => {
-                      setLoginForm({ username: 'demo', password: 'demo123' });
+                      setLoginForm({ username: 'test01', password: 'Pass1234' });
                     }}
                   >
                     普通用户

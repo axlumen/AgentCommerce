@@ -14,7 +14,7 @@ import { ProductImage } from '@/components/product/ProductImage';
 import { useCartStore } from '@/store/cart';
 import { useRequireAuth } from '@/hooks/useAuth';
 import { formatPrice } from '@/lib/utils';
-import { Trash2, ShoppingCart, ArrowLeft } from 'lucide-react';
+import { Trash2, ShoppingCart, ArrowLeft, Loader2 } from 'lucide-react';
 
 export default function CartPage() {
   const { isAuthenticated, isLoading: authLoading } = useRequireAuth();
@@ -27,7 +27,17 @@ export default function CartPage() {
     }
   }, [isAuthenticated, fetchCart]);
 
-  if (authLoading || !isAuthenticated) {
+  if (authLoading) {
+    return (
+      <div className="container mx-auto max-w-7xl px-4 py-8">
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        </div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
     return null;
   }
 
