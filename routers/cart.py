@@ -11,6 +11,7 @@ from models.user import User
 from schemas.cart import CartAddRequest, CartUpdateRequest, CartResponse
 from redis_client import get_redis
 from services import cart_service
+from services.exceptions import BusinessError
 
 router = APIRouter(prefix="/cart", tags=["购物车"])
 
@@ -33,26 +34,15 @@ async def add_to_cart(
     db: Session = Depends(get_db),
 ):
     """添加商品到购物车"""
-    # 检查 Redis 可用性
     if not get_redis():
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="购物车服务不可用（Redis 未启动）"
         )
-
-    # 检查商品是否存在
-    from services.product_service import get_product
-    product = get_product(db, data.product_id)
-    if not product:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="商品不存在")
-
-    if not product.is_on_sale:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="商品已下架")
-
-    if data.quantity > product.stock:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="库存不足")
-
-    cart_service.add_to_cart(current_user.id, data.product_id, data.quantity)
+    try:
+        cart_service.add_to_cart(current_user.id, data.product_id, data.quantity, db)
+    except BusinessError as e:
+        raise HTTPException(status_code=e.status_code, detail=str(e))
     return {"message": "已添加到购物车"}
 
 

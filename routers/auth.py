@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from database import get_db
+from dependencies import get_current_user
 from schemas.user import UserCreate, UserLogin, UserResponse, Token
 from services.auth_service import authenticate_user, create_access_token, register_user
 
@@ -46,6 +47,6 @@ async def login(data: UserLogin, db: Session = Depends(get_db)):
 
 
 @router.get("/me", response_model=UserResponse, summary="获取当前用户信息")
-async def get_me(current_user=Depends(__import__("dependencies").get_current_user)):
+async def get_me(current_user=Depends(get_current_user)):
     """获取当前登录用户信息"""
     return current_user

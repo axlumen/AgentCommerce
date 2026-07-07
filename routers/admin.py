@@ -13,8 +13,17 @@ from models.product import Product
 from models.user import User
 from schemas.order import OrderResponse
 from services import order_service, product_service
+from services.exceptions import BusinessError
 
 router = APIRouter(prefix="/admin", tags=["后台管理"], dependencies=[Depends(get_current_admin)])
+
+
+@router.post("/invalidate-cache", summary="清除语义缓存")
+async def invalidate_cache():
+    """清除语义缓存（管理员用）"""
+    from cache.semantic_cache import semantic_cache
+    semantic_cache.invalidate_all()
+    return {"message": "Cache invalidated"}
 
 
 # ==================== 用户管理 ====================
@@ -63,7 +72,7 @@ async def list_all_orders(
     db: Session = Depends(get_db),
 ):
     """管理员查看所有订单"""
-    return order_service.get_all_orders(db, page, size, status_filter)
+    return order_service.get_orders(db, page=page, size=size, status=status_filter)
 
 
 @router.put("/orders/{order_id}/ship", response_model=OrderResponse, summary="发货")
@@ -79,8 +88,8 @@ async def ship_order(
     try:
         order = order_service.update_order_status(db, order_id, "shipped")
         return order
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except BusinessError as e:
+        raise HTTPException(status_code=e.status_code, detail=str(e))
 
 
 @router.put("/orders/{order_id}/refund", response_model=OrderResponse, summary="退款")
@@ -96,8 +105,8 @@ async def refund_order(
     try:
         order = order_service.update_order_status(db, order_id, "refunded")
         return order
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except BusinessError as e:
+        raise HTTPException(status_code=e.status_code, detail=str(e))
 
 
 # ==================== 数据统计 ====================

@@ -22,6 +22,8 @@ def get_redis():
     Returns:
         Redis 实例，或 None（Redis 不可用时）
     """
+    global _redis, _initialized
+
     if _initialized:
         return _redis
 

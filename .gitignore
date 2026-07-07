@@ -1,17 +1,43 @@
+# Python
 __pycache__/
 *.pyc
 *.pyo
-*.db
-*.sqlite3
-.env
-.venv/
-venv/
-.idea/
-.vscode/
 *.egg-info/
 dist/
 build/
 .pytest_cache/
 .mypy_cache/
+
+# Virtual environments
+.venv/
+venv/
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Databases
+*.db
+*.db-journal
+*.sqlite3
+
+# Vector store / embeddings
 data/*.bin
 data/*.bin.meta.json
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Playwright
+.playwright-mcp/

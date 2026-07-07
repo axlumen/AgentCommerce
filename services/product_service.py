@@ -8,6 +8,9 @@ from sqlalchemy.orm import Session
 from models.product import Category, Product
 from schemas.product import ProductCreate, ProductUpdate
 
+# 排序字段白名单，防止注入
+ALLOWED_SORT_FIELDS = {"created_at", "price", "sales_count", "name", "stock"}
+
 
 def get_products(
     db: Session,
@@ -44,8 +47,10 @@ def get_products(
     # 总数
     total = query.count()
 
-    # 排序
-    sort_column = getattr(Product, sort_by, Product.created_at)
+    # 排序（白名单校验）
+    if sort_by not in ALLOWED_SORT_FIELDS:
+        sort_by = "created_at"
+    sort_column = getattr(Product, sort_by)
     if sort_order == "desc":
         query = query.order_by(sort_column.desc())
     else:

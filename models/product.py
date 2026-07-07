@@ -2,10 +2,9 @@
 商品模型
 """
 
-from datetime import datetime
-
-from sqlalchemy import Boolean, Column, DateTime, DECIMAL, ForeignKey, Integer, JSON, String, Text
+from sqlalchemy import Boolean, CheckConstraint, Column, DateTime, DECIMAL, ForeignKey, Integer, JSON, String, Text
 from sqlalchemy.orm import relationship
+from sqlalchemy.sql import func
 
 from database import Base
 
@@ -38,8 +37,13 @@ class Product(Base):
     specs = Column(JSON, nullable=True)
     is_on_sale = Column(Boolean, default=True)
     sales_count = Column(Integer, default=0)
-    created_at = Column(DateTime, default=datetime.now)
-    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
 
     # 关联
     category = relationship("Category", back_populates="products")
+
+    __table_args__ = (
+        CheckConstraint("stock >= 0", name="ck_product_stock_non_negative"),
+        CheckConstraint("price >= 0", name="ck_product_price_non_negative"),
+    )

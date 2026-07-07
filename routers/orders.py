@@ -10,6 +10,7 @@ from dependencies import get_current_user
 from models.user import User
 from schemas.order import OrderCreate, OrderResponse, OrderStatusUpdate
 from services import order_service
+from services.exceptions import BusinessError
 
 router = APIRouter(prefix="/orders", tags=["订单"])
 
@@ -34,8 +35,8 @@ async def create_order(
             db, current_user.id, data.address, data.cart_item_ids, data.remark
         )
         return order
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except BusinessError as e:
+        raise HTTPException(status_code=e.status_code, detail=str(e))
 
 
 @router.get("", summary="我的订单列表")
@@ -47,7 +48,7 @@ async def list_orders(
     db: Session = Depends(get_db),
 ):
     """获取当前用户的订单列表"""
-    return order_service.get_user_orders(db, current_user.id, page, size, status_filter)
+    return order_service.get_orders(db, user_id=current_user.id, page=page, size=size, status=status_filter)
 
 
 @router.get("/{order_id}", response_model=OrderResponse, summary="订单详情")
@@ -77,8 +78,8 @@ async def cancel_order(
     try:
         order = order_service.update_order_status(db, order_id, "cancelled", current_user.id)
         return order
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except BusinessError as e:
+        raise HTTPException(status_code=e.status_code, detail=str(e))
 
 
 @router.put("/{order_id}/pay", response_model=OrderResponse, summary="支付订单")
@@ -95,8 +96,8 @@ async def pay_order(
     try:
         order = order_service.update_order_status(db, order_id, "paid", current_user.id)
         return order
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except BusinessError as e:
+        raise HTTPException(status_code=e.status_code, detail=str(e))
 
 
 @router.put("/{order_id}/confirm", response_model=OrderResponse, summary="确认收货")
@@ -113,5 +114,5 @@ async def confirm_order(
     try:
         order = order_service.update_order_status(db, order_id, "completed", current_user.id)
         return order
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except BusinessError as e:
+        raise HTTPException(status_code=e.status_code, detail=str(e))

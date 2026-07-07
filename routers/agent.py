@@ -90,22 +90,8 @@ async def agent_chat(
     集成：限流检查、语义缓存、监控。
     敏感操作（如加购）会返回 needs_confirm=True，前端需引导用户确认。
     """
-    # 限流检查
-    from monitoring.rate_limiter import rate_limiter
-    from config import RATE_LIMIT_PER_MINUTE
+    _check_rate_limit(current_user.id)
 
-    allowed, rate_info = rate_limiter.check(
-        f"user:{current_user.id}",
-        limit=RATE_LIMIT_PER_MINUTE,
-        window_seconds=60,
-    )
-    if not allowed:
-        raise HTTPException(
-            status_code=429,
-            detail=f"请求过于频繁，请 {rate_info.get('reset_at', 60)} 秒后重试",
-        )
-
-    # 安全检查
     if detect_injection(request.message):
         raise HTTPException(status_code=400, detail="输入包含不安全内容")
 
@@ -113,24 +99,11 @@ async def agent_chat(
     session_id = request.session_id or str(uuid.uuid4())
     thread_id = f"user_{current_user.id}_{session_id}"
 
-    # 加载用户偏好
     user_prefs = memory_manager.get_user_preferences(current_user.id)
-
-    # 加载短期记忆
-    history = memory_manager.get_short_term(session_id)
-
-    # 构建消息列表
-    messages = [HumanMessage(content=message)]
-
-    # 获取 Agent 图
-    agent_graph = get_agent_graph()
-
-    # 配置（thread_id 用于 checkpointer）
     config = {"configurable": {"thread_id": thread_id}}
 
-    # 初始状态
     initial_state = {
-        "messages": messages,
+        "messages": [HumanMessage(content=message)],
         "user_id": current_user.id,
         "session_id": session_id,
         "tool_call_history": [],
@@ -141,62 +114,34 @@ async def agent_chat(
     }
 
     try:
-        # 设置请求上下文（工具执行时使用）
-        clear_tool_call_log()
-        db_token = set_request_context(db, current_user.id)
+        agent_graph = get_agent_graph()
+        result = _execute_agent(agent_graph, initial_state, config, db, current_user.id)
+        confirm_info = _check_interrupts(agent_graph, config)
 
-        try:
-            # 执行 Agent
-            result = agent_graph.invoke(initial_state, config=config)
-        finally:
-            reset_request_context(db_token)
+        if confirm_info:
+            return ChatResponse(
+                reply=confirm_info["confirm_message"],
+                session_id=session_id,
+                tool_calls=_extract_tool_calls(result),
+                needs_confirm=True,
+                **confirm_info,
+            )
 
-        # 处理 interrupt（需要确认的情况）
-        snapshot = agent_graph.get_state(config)
-        if snapshot and snapshot.next:
-            # 有未完成的节点 → 存在 interrupt
-            interrupt_value = None
-            if snapshot.tasks:
-                for task in snapshot.tasks:
-                    if hasattr(task, "interrupts") and task.interrupts:
-                        interrupt_value = task.interrupts[0].value
-                        break
-
-            if interrupt_value:
-                return ChatResponse(
-                    reply=interrupt_value.get("message", "需要您的确认"),
-                    session_id=session_id,
-                    tool_calls=_extract_tool_calls(result),
-                    needs_confirm=True,
-                    confirm_action=interrupt_value.get("action"),
-                    confirm_args=interrupt_value.get("args"),
-                    confirm_message=interrupt_value.get("message"),
-                )
-
-        # 正常回复
         reply = _extract_reply(result)
         tool_calls = _extract_tool_calls(result)
+        msg_dicts = _save_session_memory(result, session_id)
 
-        # 保存短期记忆
-        updated_messages = result.get("messages", [])
-        msg_dicts = _messages_to_dicts(updated_messages)
-        memory_manager.save_short_term(session_id, msg_dicts)
-
-        # 异步更新用户偏好（不阻塞响应）
         try:
             new_prefs = memory_manager.extract_preferences_from_messages(msg_dicts)
             if new_prefs:
                 memory_manager.update_user_preferences(current_user.id, new_prefs)
         except Exception:
-            pass  # 偏好更新失败不影响主流程
+            logger.debug("Failed to update user preferences")
 
-        return ChatResponse(
-            reply=reply,
-            session_id=session_id,
-            tool_calls=tool_calls,
-            needs_confirm=False,
-        )
+        return ChatResponse(reply=reply, session_id=session_id, tool_calls=tool_calls)
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.exception("Agent execution failed")
         raise HTTPException(status_code=500, detail=f"Agent 执行失败: {str(e)}")
@@ -215,57 +160,29 @@ async def agent_confirm(
     """
     session_id = request.session_id
     thread_id = request.thread_id or f"user_{current_user.id}_{session_id}"
-
-    agent_graph = get_agent_graph()
     config = {"configurable": {"thread_id": thread_id}}
 
     try:
-        # 设置请求上下文
-        clear_tool_call_log()
-        db_token = set_request_context(db, current_user.id)
-
-        try:
-            # 使用 Command resume 恢复执行
-            resume_command = Command(resume={"approved": request.approved})
-            result = agent_graph.invoke(resume_command, config=config)
-        finally:
-            reset_request_context(db_token)
+        agent_graph = get_agent_graph()
+        result = _execute_agent(
+            agent_graph, Command(resume={"approved": request.approved}), config, db, current_user.id
+        )
 
         reply = _extract_reply(result)
         tool_calls = _extract_tool_calls(result)
-
-        # 检查是否还有新的 interrupt
-        snapshot = agent_graph.get_state(config)
-        needs_confirm = False
-        confirm_action = None
-        confirm_args = None
-        confirm_message = None
-
-        if snapshot and snapshot.next:
-            for task in (snapshot.tasks or []):
-                if hasattr(task, "interrupts") and task.interrupts:
-                    interrupt_value = task.interrupts[0].value
-                    needs_confirm = True
-                    confirm_action = interrupt_value.get("action")
-                    confirm_args = interrupt_value.get("args")
-                    confirm_message = interrupt_value.get("message")
-                    break
-
-        # 保存记忆
-        updated_messages = result.get("messages", [])
-        msg_dicts = _messages_to_dicts(updated_messages)
-        memory_manager.save_short_term(session_id, msg_dicts)
+        confirm_info = _check_interrupts(agent_graph, config)
+        _save_session_memory(result, session_id)
 
         return ChatResponse(
             reply=reply,
             session_id=session_id,
             tool_calls=tool_calls,
-            needs_confirm=needs_confirm,
-            confirm_action=confirm_action,
-            confirm_args=confirm_args,
-            confirm_message=confirm_message,
+            needs_confirm=confirm_info is not None,
+            **(confirm_info or {}),
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.exception("Confirm action failed")
         raise HTTPException(status_code=500, detail=f"确认操作失败: {str(e)}")
@@ -338,6 +255,58 @@ async def agent_stats(current_user: User = Depends(get_current_user)):
 # ============================================================
 # 辅助函数
 # ============================================================
+
+
+def _check_rate_limit(user_id: int) -> None:
+    """限流检查，超限则抛出 HTTPException"""
+    from monitoring.rate_limiter import rate_limiter
+    from config import RATE_LIMIT_PER_MINUTE
+
+    allowed, rate_info = rate_limiter.check(
+        f"user:{user_id}",
+        limit=RATE_LIMIT_PER_MINUTE,
+        window_seconds=60,
+    )
+    if not allowed:
+        raise HTTPException(
+            status_code=429,
+            detail=f"请求过于频繁，请 {rate_info.get('reset_at', 60)} 秒后重试",
+        )
+
+
+def _execute_agent(agent_graph, initial_state_or_command, config: dict, db: Session, user_id: int) -> dict:
+    """执行 Agent 图（统一的上下文设置和清理）"""
+    clear_tool_call_log()
+    db_token = set_request_context(db, user_id)
+    try:
+        return agent_graph.invoke(initial_state_or_command, config=config)
+    finally:
+        reset_request_context(db_token)
+
+
+def _check_interrupts(agent_graph, config: dict) -> dict | None:
+    """检查是否有未完成的 interrupt，返回确认信息或 None"""
+    snapshot = agent_graph.get_state(config)
+    if not snapshot or not snapshot.next:
+        return None
+
+    for task in (snapshot.tasks or []):
+        if hasattr(task, "interrupts") and task.interrupts:
+            value = task.interrupts[0].value
+            return {
+                "confirm_action": value.get("action"),
+                "confirm_args": value.get("args"),
+                "confirm_message": value.get("message", "需要您的确认"),
+            }
+    return None
+
+
+def _save_session_memory(result: dict, session_id: str) -> list[dict]:
+    """保存会话记忆，返回消息字典列表"""
+    updated_messages = result.get("messages", [])
+    msg_dicts = _messages_to_dicts(updated_messages)
+    memory_manager.save_short_term(session_id, msg_dicts)
+    return msg_dicts
 
 
 def _extract_reply(result: dict) -> str:

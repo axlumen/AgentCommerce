@@ -6,13 +6,9 @@
 
 API 文档：
     http://localhost:8000/docs
-
-前端页面：
-    http://localhost:8000
 """
 
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 import logging
 import os
@@ -20,8 +16,6 @@ import time
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, Response
-from fastapi.staticfiles import StaticFiles
 
 from database import create_tables
 from routers import auth, products, cart, orders, admin, ai, agent
@@ -36,7 +30,6 @@ async def lifespan(app: FastAPI):
     try:
         _build_rag_indexes()
     except Exception as e:
-        import logging
         logging.getLogger(__name__).warning(f"RAG index build skipped: {e}")
 
     yield
@@ -44,7 +37,6 @@ async def lifespan(app: FastAPI):
 
 def _build_rag_indexes():
     """构建 RAG 检索索引"""
-    import logging
     logger = logging.getLogger(__name__)
 
     from database import SessionLocal
@@ -89,14 +81,11 @@ app = FastAPI(
 # CORS 中间件（允许前端跨域请求）
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["http://localhost:3000"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# 静态文件目录
-frontend_dir = Path(__file__).parent / "frontend"
 
 # 请求日志中间件
 @app.middleware("http")
@@ -126,35 +115,6 @@ app.include_router(ai.router, prefix="/api")
 app.include_router(agent.router, prefix="/api")
 
 
-@app.post("/api/admin/invalidate-cache")
-async def invalidate_cache():
-    """清除语义缓存（管理员用）"""
-    try:
-        from cache.semantic_cache import semantic_cache
-        semantic_cache.invalidate_all()
-        return {"message": "Cache invalidated"}
-    except Exception as e:
-        return {"error": str(e)}
-
-
-@app.get("/")
-async def root():
-    """返回前端页面"""
-    return FileResponse(frontend_dir / "index.html")
-
-
-@app.get("/style.css")
-async def css():
-    """返回 CSS"""
-    return FileResponse(frontend_dir / "style.css", media_type="text/css")
-
-
-@app.get("/app.js")
-async def js():
-    """返回 JavaScript"""
-    return FileResponse(frontend_dir / "app.js", media_type="application/javascript")
-
-
 @app.get("/health")
 async def health():
     """健康检查"""
@@ -169,11 +129,3 @@ async def api_info():
         "docs": "/docs",
         "version": "1.0.0",
     }
-
-
-# 挂载前端子目录为静态文件（core/、components/、pages/）
-# 必须放在所有路由之后，mount 的优先级低于显式路由
-for subdir in ("core", "components", "pages"):
-    sub_path = frontend_dir / subdir
-    if sub_path.is_dir():
-        app.mount(f"/{subdir}", StaticFiles(directory=sub_path), name=subdir)

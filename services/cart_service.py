@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from config import CART_KEY_PREFIX, CART_EXPIRE_DAYS
 from models.product import Product
 from redis_client import get_redis
+from services.exceptions import NotFoundError, ConflictError
 
 
 def get_cart_key(user_id: int) -> str:
@@ -16,9 +17,9 @@ def get_cart_key(user_id: int) -> str:
     return f"{CART_KEY_PREFIX}{user_id}"
 
 
-def add_to_cart(user_id: int, product_id: int, quantity: int) -> bool:
+def add_to_cart(user_id: int, product_id: int, quantity: int, db: Session) -> bool:
     """
-    添加商品到购物车
+    添加商品到购物车（含业务校验）
 
     使用 Redis Hash:
     - key: cart:{user_id}
@@ -28,13 +29,21 @@ def add_to_cart(user_id: int, product_id: int, quantity: int) -> bool:
     if not get_redis():
         raise ValueError("Redis 不可用")
 
+    # 业务校验：商品存在性、上架状态、库存
+    product = db.query(Product).filter(Product.id == product_id).first()
+    if not product:
+        raise NotFoundError("商品不存在")
+    if not product.is_on_sale:
+        raise ConflictError("商品已下架")
+    if quantity > product.stock:
+        raise ConflictError("库存不足")
+
     cart_key = get_cart_key(user_id)
     field = f"product:{product_id}"
 
     # 检查商品是否已在购物车
     existing = get_redis().hget(cart_key, field)
     if existing:
-        # 累加数量
         new_quantity = int(existing) + quantity
         get_redis().hset(cart_key, field, new_quantity)
     else:
@@ -76,6 +85,24 @@ def remove_from_cart(user_id: int, product_id: int) -> bool:
     return True
 
 
+def _parse_cart_data(cart_data: dict) -> list[tuple[int, int]]:
+    """解析 Redis Hash 购物车数据为 (product_id, quantity) 列表"""
+    parsed = []
+    for field, quantity_str in cart_data.items():
+        product_id = int(field.split(":")[1])
+        quantity = int(quantity_str)
+        parsed.append((product_id, quantity))
+    return parsed
+
+
+def _batch_query_products(db: Session, product_ids: list[int]) -> dict[int, Product]:
+    """批量查询商品，返回 {product_id: Product} 映射"""
+    if not product_ids:
+        return {}
+    products = db.query(Product).filter(Product.id.in_(product_ids)).all()
+    return {p.id: p for p in products}
+
+
 def get_cart(user_id: int, db: Session) -> dict:
     """
     获取购物车详情
@@ -96,15 +123,15 @@ def get_cart(user_id: int, db: Session) -> dict:
     if not cart_data:
         return {"items": [], "total_amount": 0.0, "selected_count": 0}
 
+    cart_items = _parse_cart_data(cart_data)
+    product_ids = [pid for pid, _ in cart_items]
+    product_map = _batch_query_products(db, product_ids)
+
     items = []
     total_amount = 0.0
 
-    for field, quantity_str in cart_data.items():
-        product_id = int(field.split(":")[1])
-        quantity = int(quantity_str)
-
-        # 查询商品信息
-        product = db.query(Product).filter(Product.id == product_id).first()
+    for product_id, quantity in cart_items:
+        product = product_map.get(product_id)
         if not product:
             continue
 
@@ -148,22 +175,32 @@ def get_selected_items(user_id: int, cart_item_ids: list[int], db: Session) -> l
         return []
 
     cart_key = get_cart_key(user_id)
-    items = []
 
+    # 批量获取选中项的数量
+    pipe = get_redis().pipeline()
     for product_id in cart_item_ids:
-        field = f"product:{product_id}"
-        quantity_str = get_redis().hget(cart_key, field)
-        if not quantity_str:
-            continue
+        pipe.hget(cart_key, f"product:{product_id}")
+    quantity_strs = pipe.execute()
 
-        quantity = int(quantity_str)
-        product = db.query(Product).filter(Product.id == product_id).first()
+    # 收集有效 product_id
+    valid_ids = []
+    quantity_map = {}
+    for product_id, quantity_str in zip(cart_item_ids, quantity_strs):
+        if quantity_str:
+            valid_ids.append(product_id)
+            quantity_map[product_id] = int(quantity_str)
+
+    # 批量查询商品
+    product_map = _batch_query_products(db, valid_ids)
+
+    items = []
+    for product_id in valid_ids:
+        product = product_map.get(product_id)
         if not product:
             continue
-
         items.append({
             "product_id": product.id,
-            "quantity": quantity,
+            "quantity": quantity_map[product_id],
             "product": product,
         })
 

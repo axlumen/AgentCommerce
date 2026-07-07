@@ -10,7 +10,8 @@ from sqlalchemy.orm import Session
 
 from models.order import Order, OrderItem, can_transition
 from models.product import Product
-from services.cart_service import clear_cart, get_selected_items
+from services.cart_service import clear_cart, get_selected_items, remove_from_cart
+from services.exceptions import NotFoundError, ConflictError
 
 
 def generate_order_no() -> str:
@@ -37,7 +38,7 @@ def create_order(db: Session, user_id: int, address: dict, cart_item_ids: list[i
     # 步骤 1：获取选中的购物车项
     cart_items = get_selected_items(user_id, cart_item_ids, db)
     if not cart_items:
-        raise ValueError("购物车为空")
+        raise NotFoundError("购物车为空")
 
     # 步骤 2-3：校验并扣减库存
     order_items_data = []
@@ -47,7 +48,7 @@ def create_order(db: Session, user_id: int, address: dict, cart_item_ids: list[i
 
         # 检查是否上架
         if not product.is_on_sale:
-            raise ValueError(f"商品 {product.name} 已下架")
+            raise ConflictError(f"商品 {product.name} 已下架")
 
         # WHERE 条件扣减库存
         affected = db.query(Product).filter(
@@ -62,7 +63,7 @@ def create_order(db: Session, user_id: int, address: dict, cart_item_ids: list[i
                     {"stock": Product.stock + prev["quantity"]}
                 )
             db.commit()
-            raise ValueError(f"商品 {product.name} 库存不足")
+            raise ConflictError(f"商品 {product.name} 库存不足")
 
         order_items_data.append({
             "product_id": product.id,
@@ -91,20 +92,21 @@ def create_order(db: Session, user_id: int, address: dict, cart_item_ids: list[i
         order_item = OrderItem(order_id=order.id, **item_data)
         db.add(order_item)
 
-    # 步骤 5：清除购物车
-    for item in cart_items:
-        from services.cart_service import remove_from_cart
-        remove_from_cart(user_id, item["product_id"])
-
+    # 步骤 5：先 commit DB，再清除购物车（避免 commit 失败导致购物车数据丢失）
     db.commit()
     db.refresh(order)
+
+    for item in cart_items:
+        remove_from_cart(user_id, item["product_id"])
+
     return order
 
 
-def get_user_orders(db: Session, user_id: int, page: int = 1, size: int = 10, status: str | None = None) -> dict:
-    """获取用户订单列表"""
-    query = db.query(Order).filter(Order.user_id == user_id)
-
+def get_orders(db: Session, user_id: int | None = None, page: int = 1, size: int = 10, status: str | None = None) -> dict:
+    """获取订单列表（user_id 为 None 时返回所有订单）"""
+    query = db.query(Order)
+    if user_id is not None:
+        query = query.filter(Order.user_id == user_id)
     if status:
         query = query.filter(Order.status == status)
 
@@ -141,10 +143,10 @@ def update_order_status(db: Session, order_id: int, target_status: str, user_id:
 
     order = query.first()
     if not order:
-        raise ValueError("订单不存在")
+        raise NotFoundError("订单不存在")
 
     if not can_transition(order.status, target_status):
-        raise ValueError(f"状态流转不合法: {order.status} -> {target_status}")
+        raise ConflictError(f"状态流转不合法: {order.status} -> {target_status}")
 
     # 更新状态和时间戳
     order.status = target_status
@@ -168,21 +170,3 @@ def update_order_status(db: Session, order_id: int, target_status: str, user_id:
     db.refresh(order)
     return order
 
-
-def get_all_orders(db: Session, page: int = 1, size: int = 10, status: str | None = None) -> dict:
-    """管理员获取所有订单"""
-    query = db.query(Order)
-
-    if status:
-        query = query.filter(Order.status == status)
-
-    total = query.count()
-    items = query.order_by(Order.created_at.desc()).offset((page - 1) * size).limit(size).all()
-
-    return {
-        "items": items,
-        "total": total,
-        "page": page,
-        "size": size,
-        "pages": (total + size - 1) // size,
-    }
